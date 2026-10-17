@@ -49,3 +49,13 @@ test("fails closed for all unsupported source or target identities", () => {
   for (const x of bad) assert.throws(() => compileSource(x), HardwareEligibilityError, x);
   assert.throws(() => compileSource(source, {entry:"wrong"}), /H004/);
 });
+
+test("HDL reserved identifiers fail closed even when valid Oreslang names", () => {
+  for (const id of ["case", "initial", "function", "parameter", "interface", "package", "signed", "time", "default", "integer"]) {
+    assert.throws(() => compileSource("fnc " + id + "(u8 a, u8 b): u8 { return a + b; }"), /H003/);
+    assert.throws(() => compileSource("fnc f(u8 " + id + ", u8 b): u8 { return b + b; }"), /H003/);
+  }
+});
+test("invalid UTF-16 surrogate sequences are rejected at source boundary", () => {
+  assert.throws(() => compileSource("fnc f(u8 a, u8 b): u8 { return a + b; }\uD800"), /H001/);
+});

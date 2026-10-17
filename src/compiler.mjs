@@ -7,14 +7,14 @@ export class HardwareEligibilityError extends Error {
   }
 }
 const reject = (code, message) => { throw new HardwareEligibilityError(code, message); };
-const forbidden = new Set(["module", "endmodule", "input", "output", "wire", "reg", "logic", "assign", "always", "generate", "endgenerate", "begin", "end", "result"]);
+const forbidden = new Set(["module", "endmodule", "input", "output", "wire", "reg", "logic", "assign", "always", "generate", "endgenerate", "begin", "end", "result", "if", "else", "for", "while", "case", "function", "task", "parameter", "localparam", "integer", "signed", "unsigned", "default", "initial", "final", "interface", "package", "import", "export", "time", "tri", "wand", "wor", "supply0", "supply1"]);
 const identifier = (s) => /^[A-Za-z_][A-Za-z_0-9]*$/.test(s) && !forbidden.has(s.toLowerCase());
 
 // Only a single, two-argument, same-width unsigned return expression is eligible.
 // This narrow parser is intentionally independent from (not a replacement for) the
 // Oreslang typed frontend; a verified frontend adapter must replace it for H1.
 export function compileSource(source, options = {}) {
-  if (typeof source !== "string" || source.length > 65536 || source.includes("\0")) {
+  if (typeof source !== "string" || source.length > 65536 || source.includes("\0") || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) {
     reject("H001", "invalid source size or encoding");
   }
   const pattern = /^\s*(?:pub\s+)?fnc\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(\s*(u(?:[1-9]|[1-5][0-9]|6[0-4]))\s+([A-Za-z_][A-Za-z_0-9]*)\s*,\s*(u(?:[1-9]|[1-5][0-9]|6[0-4]))\s+([A-Za-z_][A-Za-z_0-9]*)\s*\)\s*:\s*(u(?:[1-9]|[1-5][0-9]|6[0-4]))\s*\{\s*return\s+([A-Za-z_][A-Za-z_0-9]*)\s*([+&|^-])\s*([A-Za-z_][A-Za-z_0-9]*)\s*;\s*\}\s*$/;
