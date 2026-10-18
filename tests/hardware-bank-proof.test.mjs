@@ -51,3 +51,38 @@ test('exhaustive 1..4 bank mapping and conflict oracle on small addresses',()=>{
     else assert.equal(proveStaticBanking(forbidden).accessCount,2);
   }
 });
+
+test('deterministic multi-cycle differential stress matches independent port oracle',()=>{
+  let seed=0x5eeda11;
+  const rand=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return seed>>>0;};
+  const admissible=(cycles,banks,rd,wr,total)=>{
+    for(const accesses of cycles){
+      const uses=Array.from({length:banks},()=>({read:0,write:0}));
+      const cell=new Map();
+      for(const a of accesses){
+        const address=Number(a.address),bank=address%banks;
+        const t=uses[bank];t[a.kind]++;
+        if(t.read>rd||t.write>wr||t.read+t.write>total)return false;
+        const previous=cell.get(address);
+        if(previous && (previous==='write'||a.kind==='write'))return false;
+        cell.set(address,a.kind);
+      }
+    }
+    return true;
+  };
+  for(let round=0;round<10000;round++){
+    const banks=[1,2,4][rand()%3],rd=rand()%3,wr=rand()%3,total=1+rand()%4;
+    const cycles=Array.from({length:1+rand()%3},()=>Array.from({length:rand()%7},
+      ()=>({address:BigInt(rand()%16),kind:(rand()%2?'read':'write')})));
+    const config=base({bankCount:banks,readPorts:rd,writePorts:wr,totalPorts:total,cycles});
+    const expected=admissible(cycles,banks,rd,wr,total);
+    // A configuration without *any* available physical read or write port
+    // is invalid even for empty cycles; match the proof's admission rule.
+    if(rd+wr===0||!expected)assert.throws(()=>proveStaticBanking(config));
+    else{
+      const result=proveStaticBanking(config);
+      assert.equal(result.accessCount,cycles.reduce((n,x)=>n+x.length,0));
+      assert.equal(result.cycles,cycles.length);
+    }
+  }
+});
