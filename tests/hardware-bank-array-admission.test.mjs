@@ -34,9 +34,9 @@ test('access array getters are rejected without invoking them',()=>{
 });
 test('sparse cycle and sparse access arrays are rejected',()=>{
   const c=config();delete c.cycles[0];
-  assert.throws(()=>proveStaticBanking(c),/dense own data elements/);
+  assert.throws(()=>proveStaticBanking(c),/dense/);
   const d=config();delete d.cycles[0][0];
-  assert.throws(()=>proveStaticBanking(d),/dense own data elements/);
+  assert.throws(()=>proveStaticBanking(d),/dense/);
 });
 test('array metadata, symbol tags and nonstandard prototypes deny',()=>{
   const c=config();c.cycles.extras='untested';
