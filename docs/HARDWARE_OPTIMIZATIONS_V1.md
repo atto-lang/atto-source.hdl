@@ -105,3 +105,12 @@ The static banking helper now accepts only exact ordinary data records for the t
 Verification on exact committed Git blobs (local Node 22): **12/12 focused tests passed**, comprising seven config/array admission tests, four Proxy/revoked-Proxy cases, and one 20,000-input independent differential bank/port/hazard model. The first local test run caught an over-specific sparse-array error assertion; it was corrected and verified in the committed regression test. The source and all three relevant test Git blob SHA-1 values matched the GitHub branch. This does not prove HDL compilation, simulation, synthesized RAM semantics or GitHub-hosted CI. The preexisting test suite and native compiler are separate gates.
 
 Private cross-organization source mirror execution remains blocked by the independent export-approval and incident-response requirements in platform-conformance #22/#77, #57 and #86. An alternative organization's runner capacity alone is not an export permit.
+
+
+## October 18 — option-shape audit and regression repair
+
+Both hardware-width proof entry points now reject untrusted top-level configuration getters, Proxies, revoked Proxies, foreign prototypes and extra string/symbol fields *before* destructuring. Arithmetic input ranges also reject Proxies and unexpected own-key metadata. Only static own-data records are accepted. The stricter shape check intentionally classifies absent `signed` as invalid options rather than silently inferring signedness.
+
+The first local exact-source test replay exposed a real regression in this hardening: `proveNarrowArithmetic` had destructured `left/right` into `const` but then reassigned them after validation. This was corrected to `let` at committed head `a88572d82b4ba171190e973529c17b19f5b50142`. The amended original negative test now expects fail-closed rejection for omitted signedness. A new `tests/hardware-width-proof-options.test.mjs` exercises getter/Proxy/revoked-Proxy rejection, symbol metadata, inherited fields, valid null-prototype inputs, and immutable results.
+
+**Verification:** 35/35 tests from seven checked-in HDL proof-test files passed on the exact latest GitHub width/bank implementation content in an isolated strict-mode JavaScript test replay. The test harness substituted a tracked Proxy detector for Node's `util.types.isProxy` and emulated the subset of Node assertions used; it is **not** the actual `node --test` process, generated RTL equivalence, synthesis, FPGA/ASIC measurement or hosted CI. A separate full source-organization runner gate is required.

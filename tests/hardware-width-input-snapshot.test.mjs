@@ -27,7 +27,7 @@ test('proxy configurations and ranges are rejected before any trap executes',()=
       getPrototypeOf(){trapped++;throw Error('prototype trap ran');},
       ownKeys(){trapped++;throw Error('ownKeys trap ran');}
     });
-    assert.throws(()=>run(hostile),/plain non-proxy record/);
+    assert.throws(()=>run(hostile),/plain data record/);
     assert.equal(trapped,0);
   }
   let trapped=0;
@@ -45,8 +45,8 @@ test('top-level extras, symbols, inherited fields and array inputs fail closed',
   const symbol=arithmetic();symbol[Symbol('hidden')]=true;
   assert.throws(()=>proveNarrowArithmetic(symbol),/exact own data/);
   const inherited=Object.assign(Object.create(counter()),{});
-  assert.throws(()=>proveBoundedCounter(inherited),/plain non-proxy record/);
-  assert.throws(()=>proveBoundedCounter([]),/plain non-proxy record/);
+  assert.throws(()=>proveBoundedCounter(inherited),/plain data record/);
+  assert.throws(()=>proveBoundedCounter([]),/plain data record/);
 });
 
 test('null-prototype plain record inputs preserve the numerical certificate',()=>{
