@@ -83,6 +83,17 @@ def validate(spec):
     }
 
 
+
+def unique_json_fields(pairs):
+    """Never let duplicate JSON keys replace an earlier optimization authority."""
+    values = {}
+    for key, value in pairs:
+        if key in values:
+            raise Rejected(f"duplicate JSON field: {key}")
+        values[key] = value
+    return values
+
+
 def main(argv):
     if len(argv) != 2:
         print("usage: validate_optimization_intent.py manifest.json", file=sys.stderr)
@@ -91,7 +102,7 @@ def main(argv):
         path = Path(argv[1])
         if path.stat().st_size > 65536:
             raise Rejected("manifest exceeds 64 KiB")
-        spec = json.loads(path.read_text(encoding="utf-8"))
+        spec = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_json_fields)
         print(json.dumps(validate(spec), sort_keys=True))
         return 0
     except (OSError, ValueError, UnicodeError) as exc:
