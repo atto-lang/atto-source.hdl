@@ -2,7 +2,7 @@ import {isProxy} from 'node:util/types';
 // The hardware proof receives host-owned descriptors, not live guest objects.
 // Snapshot exact own data properties before any semantic read. In particular,
 // no accessor or Proxy trap may run while constructing a width certificate.
-function snapshotExactRecord(value, fields, shapeError, dataError) {
+function snapshotExactRecord(value, fields, shapeError, dataError, keysError=dataError) {
   if(value===null || typeof value!=='object' || Array.isArray(value) ||
      isProxy(value) || (Object.getPrototypeOf(value)!==Object.prototype &&
                          Object.getPrototypeOf(value)!==null))deny(shapeError);
@@ -10,8 +10,8 @@ function snapshotExactRecord(value, fields, shapeError, dataError) {
   if(fields.includes('signed') && !Object.hasOwn(d,'signed'))
     deny('explicit signedness required');
   if(Reflect.ownKeys(d).length!==fields.length ||
-     fields.some(key=>!Object.hasOwn(d,key)||!Object.hasOwn(d[key],'value')))
-    deny(dataError);
+     fields.some(key=>!Object.hasOwn(d,key)))deny(keysError);
+  if(fields.some(key=>!Object.hasOwn(d[key],'value')))deny(dataError);
   return Object.fromEntries(fields.map(key=>[key,d[key].value]));
 }
 // Hardware-only finite-range width planning. No RTL is generated here.
@@ -27,7 +27,8 @@ const checkWidth = bits => requireValid(Number.isSafeInteger(bits) && bits>=1 &&
 const checkRange = (r, label) => {
   const s=snapshotExactRecord(r,['min','max'],
     label + ' must be an exact finite bigint range',
-    label + ' must use stable own bigint data properties');
+    label + ' must use stable own bigint data properties',
+    label + ' must be an exact finite bigint range');
   requireValid(typeof s.min==='bigint' && typeof s.max==='bigint' &&
     s.min<=s.max, label + ' must use stable own bigint data properties');
   return Object.freeze(s);
