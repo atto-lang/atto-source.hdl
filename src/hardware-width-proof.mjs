@@ -9,10 +9,18 @@ const bounds = (bits, signed) => signed ?
 const checkWidth = bits => requireValid(Number.isSafeInteger(bits) && bits>=1 && bits<=128,
   'reference bits must be a safe integer in 1..128');
 const checkRange = (r, label) => {
-  requireValid(r && typeof r==='object' && !Array.isArray(r) &&
-    Object.keys(r).sort().join(',')==='max,min' &&
-    typeof r.min==='bigint' && typeof r.max==='bigint' && r.min<=r.max,
+  // Read descriptors once: accessor-backed ranges can change between
+  // admission and arithmetic, producing an unsound width certificate.
+  requireValid(r !== null && typeof r==='object' && !Array.isArray(r) &&
+    (Object.getPrototypeOf(r)===Object.prototype || Object.getPrototypeOf(r)===null) &&
+    Object.keys(r).sort().join(',')==='max,min',
     label + ' must be an exact finite bigint range');
+  const d=Object.getOwnPropertyDescriptors(r);
+  requireValid(Object.hasOwn(d.min,'value') && Object.hasOwn(d.max,'value') &&
+    typeof d.min.value==='bigint' && typeof d.max.value==='bigint' &&
+    d.min.value<=d.max.value,
+    label + ' must use stable own bigint data properties');
+  return Object.freeze({min:d.min.value,max:d.max.value});
 };
 const fits = (r, bits, signed) => {
   const b=bounds(bits,signed);return r.min>=b.min && r.max<=b.max;
@@ -36,13 +44,13 @@ export function proveBoundedCounter({target,referenceBits,maxInclusive}){
   const r={min:0n,max:maxInclusive};
   requireValid(fits(r,referenceBits,false),'counter bound exceeds declared reference width');
   return Object.freeze({target,referenceBits,resultBits:narrowBits(r,false,referenceBits),
-    signed:false,range:{min:'0',max:maxInclusive.toString()},
+    signed:false,range:Object.freeze({min:'0',max:maxInclusive.toString()}),
     proof:'exact static bounded unsigned range; no overflow'});
 }
 export function proveNarrowArithmetic({target,operation,left,right,signed,referenceBits}){
   const cfg={target,referenceBits,signed};config(cfg);
   requireValid(['add','sub','mul'].includes(operation), 'unknown hardware operation');
-  checkRange(left,'left');checkRange(right,'right');
+  left=checkRange(left,'left');right=checkRange(right,'right');
   requireValid(fits(left,referenceBits,signed) && fits(right,referenceBits,signed),
     'operand exceeds declared reference type');
   let result;
@@ -56,6 +64,6 @@ export function proveNarrowArithmetic({target,operation,left,right,signed,refere
     'operation may overflow reference type (wrapped semantics not admitted)');
   return Object.freeze({target,operation,signed,referenceBits,
     resultBits:narrowBits(result,signed,referenceBits),
-    range:{min:result.min.toString(),max:result.max.toString()},
+    range:Object.freeze({min:result.min.toString(),max:result.max.toString()}),
     proof:'all operand pairs fit reference type and exact result interval'});
 }
