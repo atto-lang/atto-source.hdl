@@ -26,6 +26,13 @@ class StaticOptimizationIntentTests(unittest.TestCase):
         with self.assertRaises(Rejected):
             validate(spec)
 
+    def test_kernel_identifier_is_safe_for_future_rtl_emission(self):
+        for invalid in ("1adder", "narrow-counter", "name with space", "module",
+                        "endmodule", "always", "A" * 129, "\x00hidden"):
+            self.check_rejected(kernel=invalid)
+        for accepted in ("_adder", "Add_8", "A" * 128):
+            self.assertEqual(validate({**GOOD, "kernel": accepted})["kernel"], accepted)
+
     def test_bounded_manifest_not_synthesis_proof(self):
         report = validate(copy.deepcopy(GOOD))
         self.assertEqual(report["status"], "STATIC_PREFLIGHT_ONLY")
