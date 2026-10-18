@@ -63,3 +63,17 @@ fixed-width typed HW IR + signedness/range contracts
 - [ ] FPGA/ASIC resource and timing reports with explicit toolchain, design and target hashes
 - [ ] Cross-repo pinned contract with oreslang-common-source and target-profile schema
 - [ ] No FPGA bitstream, physical timing or fabricated silicon claim without corresponding evidence
+
+
+## Implemented standalone width-proof prototype (draft PR #8)
+
+The branch now contains `src/hardware-width-proof.mjs` and `tests/hardware-width-proof.test.mjs`, with `npm test` (Node 22). This is a **host-side, compiler-independent range-proof library**, not RTL emission or a source-language feature.
+
+- `proveBoundedCounter` computes the minimum unsigned width needed for every static counter value **including** the terminal bound: a maximum of 100 requires 7 bits.
+- `proveNarrowArithmetic` supports interval proofs for add/subtract/multiply with explicit signedness, 1..128-bit original type and explicit FPGA/ASIC target.
+- All operand pairs are enclosed by a checked mathematical result interval. Operations that can overflow the original type reject rather than secretly adopting widening, wrapping or trap semantics.
+- Result widths are selected only after proving the complete interval fits; unknown/dynamic ranges, CPU target, mismatched operand types and invalid bit budgets reject.
+- Tests compare exhaustive 1..8-bit unsigned and 1..6-bit signed concrete operands against the range result and expected overflow rejection. Local `npm test`: 5 passing tests.
+- CI workflow `.github/workflows/width-proof.yml` runs **proof self-tests only**. CI status is not evidence of synthesizable SystemVerilog.
+
+Remaining for #6: integrate the proof into compiler HIR/RTL lowering, define real syntax/type policy, emit independently verified SystemVerilog, exhaustively simulate small widths, synthesize and compare mapped area/timing under explicit toolchains. Do not mark the hardware optimization implemented until those gates pass.
