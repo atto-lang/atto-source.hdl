@@ -1,3 +1,4 @@
+import {isProxy} from 'node:util/types';
 // Static hardware memory banking admission model. No RTL or physical mapping.
 // The proof is conservative: unknown addresses, alias conflicts, and port
 // oversubscription are rejected rather than assuming a multiported RAM.
@@ -11,7 +12,7 @@ function snapshotRecord(o, keys, label) {
     'only static exact address/kind supported' : label+' must be a plain record';
   const dataError=label==='memory access' ?
     'accessor-backed memory access not admitted' : label+' must have exact own data properties';
-  requireProof(o!==null && typeof o==='object' && !Array.isArray(o) &&
+  requireProof(!isProxy(o) && o!==null && typeof o==='object' && !Array.isArray(o) &&
     (Object.getPrototypeOf(o)===Object.prototype || Object.getPrototypeOf(o)===null),
     shapeError);
   const d=Object.getOwnPropertyDescriptors(o);
@@ -21,7 +22,7 @@ function snapshotRecord(o, keys, label) {
   return Object.fromEntries(keys.map(k=>[k,d[k].value]));
 }
 function snapshotArray(a, max, label) {
-  requireProof(Array.isArray(a) && Object.getPrototypeOf(a)===Array.prototype &&
+  requireProof(!isProxy(a) && Array.isArray(a) && Object.getPrototypeOf(a)===Array.prototype &&
     a.length<=max, label+' must be a bounded ordinary array');
   const d=Object.getOwnPropertyDescriptors(a);
   requireProof(Reflect.ownKeys(d).length===a.length+1,
