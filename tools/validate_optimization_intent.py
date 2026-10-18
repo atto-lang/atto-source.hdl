@@ -5,6 +5,8 @@ No Oreslang source parsing, scheduling proof, Verilog emission or synthesis.
 This module intentionally rejects any unknown/nonstatic hardware attributes.
 """
 import json
+import os
+import stat
 import re
 import sys
 from pathlib import Path
@@ -87,18 +89,60 @@ def validate(spec):
     }
 
 
+MAX_MANIFEST_BYTES = 65536
+
+
+def _unique_json_fields(pairs):
+    values = {}
+    for key, value in pairs:
+        if key in values:
+            raise Rejected(f"duplicate JSON field: {key}")
+        values[key] = value
+    return values
+
+
+def _reject_nonstandard_constant(value):
+    raise Rejected(f"nonstandard JSON number: {value}")
+
+
+def read_manifest(path):
+    """Read one bounded regular file without following the final symlink.
+
+    This only enforces file-format admission, not a secure filesystem sandbox.
+    """
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+        raise Rejected("safe manifest input unsupported on this host")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise Rejected("manifest must be a regular file")
+        if info.st_size > MAX_MANIFEST_BYTES:
+            raise Rejected("manifest exceeds 64 KiB")
+        data = bytearray()
+        while len(data) <= MAX_MANIFEST_BYTES:
+            block = os.read(fd, min(16384, MAX_MANIFEST_BYTES + 1 - len(data)))
+            if not block:
+                break
+            data.extend(block)
+        if len(data) > MAX_MANIFEST_BYTES:
+            raise Rejected("manifest exceeds 64 KiB")
+    finally:
+        os.close(fd)
+    return json.loads(data.decode("utf-8"),
+                      object_pairs_hook=_unique_json_fields,
+                      parse_constant=_reject_nonstandard_constant)
+
+
 def main(argv):
     if len(argv) != 2:
         print("usage: validate_optimization_intent.py manifest.json", file=sys.stderr)
         return 64
     try:
-        path = Path(argv[1])
-        if path.stat().st_size > 65536:
-            raise Rejected("manifest exceeds 64 KiB")
-        spec = json.loads(path.read_text(encoding="utf-8"))
+        spec = read_manifest(Path(argv[1]))
         print(json.dumps(validate(spec), sort_keys=True))
         return 0
-    except (OSError, ValueError, UnicodeError) as exc:
+    except (OSError, ValueError, UnicodeError, RecursionError) as exc:
         print(f"REJECTED: {exc}", file=sys.stderr)
         return 65
 
