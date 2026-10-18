@@ -77,3 +77,11 @@ The branch now contains `src/hardware-width-proof.mjs` and `tests/hardware-width
 - CI workflow `.github/workflows/width-proof.yml` runs **proof self-tests only**. CI status is not evidence of synthesizable SystemVerilog.
 
 Remaining for #6: integrate the proof into compiler HIR/RTL lowering, define real syntax/type policy, emit independently verified SystemVerilog, exhaustively simulate small widths, synthesize and compare mapped area/timing under explicit toolchains. Do not mark the hardware optimization implemented until those gates pass.
+
+## Static banking proof implemented (issue #5)
+
+This draft now includes `src/hardware-bank-proof.mjs` and `tests/hardware-bank-proof.test.mjs`. The helper admits only **exact static integer addresses**, bounded cycle schedules and explicit FPGA/ASIC target/port configurations. It maps each address to `address % bankCount`, enforces per-bank read/write/total physical port limits, and rejects write/write and read/write collisions at one address within a clock cycle. Unknown aliasing or dynamic addresses fail closed instead of guessing arbitration semantics. All admitted schedules preserve input access ordering.
+
+A locally executed Node 22 run of the **exact Git blob contents** passed 6/6 tests; exhaustive two-access bank mapping cases covered 1, 2 and 4 banks and tested both conflict-free and oversubscribed schedules. This is a static *admission proof*, **not** BRAM mapping, Verilog generation, a synthesis report, or proof of any initiation interval. To complete issue #5: integrate with typed HIR, choose collision/read-during-write semantics by physical RAM primitive, lower to RTL, run dynamic-address arbitration/equivalence fixtures and synthesize with actual device resource reports.
+
+**Private CI policy:** Some existing cross-organization private-source mirror paths are under active security incident hold (conformance #22/#77 and PR #86). No confidential Oreslang source may be transferred to an alternative Actions organization until independently approved protected-main exact-snapshot export policy and source incident clearance exist. Locally executed source-free tests do not satisfy GitHub Actions code-review release gates.
