@@ -45,3 +45,12 @@ test('genuine null-prototype records retain valid semantics and frozen results',
   const ar=arithmetic();ar.right=Object.assign(Object.create(null),ar.right);
   assert.deepEqual(proveNarrowArithmetic(ar).range,{min:'0',max:'9'});
 });
+
+test('two incorrect range keys produce controlled rejection rather than TypeError',()=>{
+  const cfg=arithmetic();cfg.left={one:0n,two:1n};
+  assert.throws(()=>proveNarrowArithmetic(cfg),RangeError);
+  const malformed=Object.create(null);
+  malformed.min=0n;malformed[Symbol('max')]=1n;
+  cfg.left=malformed;
+  assert.throws(()=>proveNarrowArithmetic(cfg),RangeError);
+});
