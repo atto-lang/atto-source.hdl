@@ -97,3 +97,11 @@ The width helper now captures input range bounds from **own data property descri
 The checked-in test module `tests/hardware-proof-accessor-hardening.test.mjs` adds six adversarial cases for getter calls, forged/inherited access fields, accepted null-prototype data records and attempted proof rewriting.
 
 **Local Node 22 replay:** all **18/18 HDL proof tests passed**, including exhaustive unsigned 1..8-bit arithmetic, signed 1..6-bit arithmetic, deterministic 10,000 multi-cycle bank schedules and six new adversarial cases. Every test and implementation file used in this replay matched its GitHub Git blob SHA at the tested head. This is source-local proof-model evidence, not synthesis, actual Oreslang frontend compilation or a hosted CI success.
+
+## October 18 — dense schedule and Proxy admission hardening
+
+The static banking helper now accepts only exact ordinary data records for the top-level configuration and individual memory accesses, plus **dense ordinary arrays** for the outer cycle plan and each cycle's access list. It rejects getters/setters, sparse indices, inherited keys, extra string or symbol fields, nonstandard array prototypes, Proxy-wrapped arrays/records and revoked Proxies before reading guest properties. Host-side Node 22 `node:util/types.isProxy` is used; this is a Node-hosted safety proof helper, not freestanding `core` or synthesizable Oreslang code.
+
+Verification on exact committed Git blobs (local Node 22): **12/12 focused tests passed**, comprising seven config/array admission tests, four Proxy/revoked-Proxy cases, and one 20,000-input independent differential bank/port/hazard model. The first local test run caught an over-specific sparse-array error assertion; it was corrected and verified in the committed regression test. The source and all three relevant test Git blob SHA-1 values matched the GitHub branch. This does not prove HDL compilation, simulation, synthesized RAM semantics or GitHub-hosted CI. The preexisting test suite and native compiler are separate gates.
+
+Private cross-organization source mirror execution remains blocked by the independent export-approval and incident-response requirements in platform-conformance #22/#77, #57 and #86. An alternative organization's runner capacity alone is not an export permit.
