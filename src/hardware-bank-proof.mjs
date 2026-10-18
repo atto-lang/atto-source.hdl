@@ -4,9 +4,17 @@
 const reject = why => {throw new RangeError('hardware bank proof rejected: '+why);};
 const requireProof = (p,why) => {if(!p)reject(why);};
 const integer = (n,min,max) => Number.isSafeInteger(n) && n>=min && n<=max;
-function ownKeys(o,keys) {
-  return o!==null && typeof o==='object' && !Array.isArray(o) &&
-    Object.keys(o).sort().join(',')===[...keys].sort().join(',');
+function snapshotAccess(o) {
+  // Reject getter/setter/proxy-style dynamic values: each access must have
+  // stable own data fields before it can contribute to a hardware proof.
+  requireProof(o!==null && typeof o==='object' && !Array.isArray(o) &&
+    (Object.getPrototypeOf(o)===Object.prototype || Object.getPrototypeOf(o)===null) &&
+    Object.keys(o).sort().join(',')==='address,kind',
+    'only static exact address/kind supported');
+  const d=Object.getOwnPropertyDescriptors(o);
+  requireProof(Object.hasOwn(d.address,'value') && Object.hasOwn(d.kind,'value'),
+    'accessor-backed memory access not admitted');
+  return Object.freeze({address:d.address.value,kind:d.kind.value});
 }
 export function proveStaticBanking({target,depth,bankCount,readPorts,writePorts,totalPorts,cycles}={}) {
   requireProof(target==='fpga'||target==='asic','explicit FPGA/ASIC target required');
@@ -26,8 +34,8 @@ export function proveStaticBanking({target,depth,bankCount,readPorts,writePorts,
     count+=accesses.length;
     requireProof(count<=16384,'total accesses exceed proof budget');
     const usage=new Map(), addresses=new Map(), row=[];
-    for(const a of accesses) {
-      requireProof(ownKeys(a,['address','kind']), 'only static exact address/kind supported');
+    for(const item of accesses) {
+      const a=snapshotAccess(item);
       requireProof(typeof a.address==='bigint' && a.address>=0n &&
         a.address<BigInt(depth),'out-of-bounds or non-static address');
       requireProof(a.kind==='read'||a.kind==='write','unknown access kind');
