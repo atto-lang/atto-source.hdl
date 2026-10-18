@@ -62,7 +62,7 @@ export function proveBoundedCounter(options={}) {
     proof:'exact static bounded unsigned range; no overflow'});
 }
 export function proveNarrowArithmetic(options={}) {
-  const {target,operation,left,right,signed,referenceBits}=
+  let {target,operation,left,right,signed,referenceBits}=
     snapshotOptions(options,['target','operation','left','right','signed','referenceBits']);
   const cfg={target,referenceBits,signed};config(cfg);
   requireValid(['add','sub','mul'].includes(operation), 'unknown hardware operation');
