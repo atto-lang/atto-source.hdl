@@ -62,7 +62,7 @@ export function proveBoundedCounter(input){
     proof:'exact static bounded unsigned range; no overflow'});
 }
 export function proveNarrowArithmetic(input){
-  const {target,operation,left,right,signed,referenceBits}=snapshotExactRecord(input,
+  let {target,operation,left,right,signed,referenceBits}=snapshotExactRecord(input,
     ['target','operation','left','right','signed','referenceBits'],
     'arithmetic configuration must be a plain non-proxy record',
     'arithmetic configuration must have exact own data properties');
