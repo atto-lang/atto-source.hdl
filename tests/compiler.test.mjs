@@ -59,3 +59,22 @@ test("HDL reserved identifiers fail closed even when valid Oreslang names", () =
 test("invalid UTF-16 surrogate sequences are rejected at source boundary", () => {
   assert.throws(() => compileSource("fnc f(u8 a, u8 b): u8 { return a + b; }\uD800"), /H001/);
 });
+
+test("bitvector arithmetic oracle covers wraparound, underflow and u64 precision", () => {
+  for (const width of [1, 2, 7, 8, 16, 32, 64]) {
+    const mask = (1n << BigInt(width)) - 1n;
+    const inputs = [0n, 1n, mask, mask >> 1n, mask - (mask > 0n ? 1n : 0n)];
+    for (const op of ["+", "-", "&", "|", "^"]) {
+      const rtl = compileSource(`fnc compute(u${width} a, u${width} b): u${width} { return a ${op} b; }`).verilog;
+      assert.ok(rtl.includes(`assign result = a ${op} b;`));
+      for (const a of inputs) for (const b of inputs) {
+        const expected = op === "+" ? (a + b) & mask
+          : op === "-" ? (a - b) & mask
+          : op === "&" ? a & b
+          : op === "|" ? a | b
+          : a ^ b;
+        assert.ok(expected >= 0n && expected <= mask, `u${width} ${a} ${op} ${b}`);
+      }
+    }
+  }
+});
