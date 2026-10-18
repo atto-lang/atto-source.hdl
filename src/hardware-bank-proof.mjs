@@ -4,38 +4,53 @@
 const reject = why => {throw new RangeError('hardware bank proof rejected: '+why);};
 const requireProof = (p,why) => {if(!p)reject(why);};
 const integer = (n,min,max) => Number.isSafeInteger(n) && n>=min && n<=max;
-function snapshotAccess(o) {
-  // Reject getter/setter/proxy-style dynamic values: each access must have
-  // stable own data fields before it can contribute to a hardware proof.
+function snapshotRecord(o, keys, label) {
+  // Stable plain data records only. Proxies and hostile host objects are not
+  // a supported proof input: use decoded plain records from a trusted parser.
   requireProof(o!==null && typeof o==='object' && !Array.isArray(o) &&
-    (Object.getPrototypeOf(o)===Object.prototype || Object.getPrototypeOf(o)===null) &&
-    Object.keys(o).sort().join(',')==='address,kind',
-    'only static exact address/kind supported');
+    (Object.getPrototypeOf(o)===Object.prototype || Object.getPrototypeOf(o)===null),
+    label+' must be a plain record');
   const d=Object.getOwnPropertyDescriptors(o);
-  requireProof(Object.hasOwn(d.address,'value') && Object.hasOwn(d.kind,'value'),
-    'accessor-backed memory access not admitted');
-  return Object.freeze({address:d.address.value,kind:d.kind.value});
+  requireProof(Reflect.ownKeys(d).length===keys.length &&
+    keys.every(k=>Object.hasOwn(d,k) && Object.hasOwn(d[k],'value')),
+    label+' must have exact own data properties');
+  return Object.fromEntries(keys.map(k=>[k,d[k].value]));
 }
-export function proveStaticBanking({target,depth,bankCount,readPorts,writePorts,totalPorts,cycles}={}) {
+function snapshotArray(a, max, label) {
+  requireProof(Array.isArray(a) && Object.getPrototypeOf(a)===Array.prototype &&
+    a.length<=max, label+' must be a bounded ordinary array');
+  const d=Object.getOwnPropertyDescriptors(a);
+  requireProof(Reflect.ownKeys(d).length===a.length+1,
+    label+' must be dense and have no extra properties');
+  const values=[];
+  for(let i=0;i<a.length;i++) {
+    const item=d[String(i)];
+    requireProof(item && Object.hasOwn(item,'value'),
+      label+' must have only dense own data elements');
+    values.push(item.value);
+  }
+  return values;
+}
+export function proveStaticBanking(options={}) {
+  const {target,depth,bankCount,readPorts,writePorts,totalPorts,cycles:cycleInput}=
+    snapshotRecord(options,['target','depth','bankCount','readPorts','writePorts',
+      'totalPorts','cycles'],'banking configuration');
   requireProof(target==='fpga'||target==='asic','explicit FPGA/ASIC target required');
   requireProof(integer(depth,1,65536) && integer(bankCount,1,256) &&
     bankCount<=depth, 'static depth and bank count required');
   requireProof(integer(readPorts,0,8) && integer(writePorts,0,8) &&
     integer(totalPorts,1,8) && readPorts+writePorts>=1,
     'explicit physical port budgets required');
-  requireProof(Array.isArray(cycles) && cycles.length<=1024,
-    'bounded static clock-cycle plan required');
+  const cycles=snapshotArray(cycleInput,1024,'clock-cycle plan');
   let count=0;
   const schedule=[];
   for(let cycle=0;cycle<cycles.length;cycle++) {
-    const accesses=cycles[cycle];
-    requireProof(Array.isArray(accesses) && accesses.length<=1024,
-      'bounded access list required');
+    const accesses=snapshotArray(cycles[cycle],1024,'clock-cycle accesses');
     count+=accesses.length;
     requireProof(count<=16384,'total accesses exceed proof budget');
     const usage=new Map(), addresses=new Map(), row=[];
     for(const item of accesses) {
-      const a=snapshotAccess(item);
+      const a=snapshotRecord(item,['address','kind'],'memory access');
       requireProof(typeof a.address==='bigint' && a.address>=0n &&
         a.address<BigInt(depth),'out-of-bounds or non-static address');
       requireProof(a.kind==='read'||a.kind==='write','unknown access kind');
