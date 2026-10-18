@@ -5,6 +5,7 @@ No Oreslang source parsing, scheduling proof, Verilog emission or synthesis.
 This module intentionally rejects any unknown/nonstatic hardware attributes.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -34,8 +35,11 @@ def validate(spec):
     if spec["schema_version"] != 1 or type(spec["schema_version"]) is not int:
         raise Rejected("unknown schema version")
     name = spec["kernel"]
-    if not isinstance(name, str) or not name.isascii() or not name.replace("_", "a").isalnum() or not name:
-        raise Rejected("kernel must be a simple ASCII name")
+    if not isinstance(name, str) or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", name) is None:
+        raise Rejected("kernel must be a bounded SystemVerilog identifier")
+    if name in {"module", "endmodule", "input", "output", "inout", "wire", "reg", "logic",
+                "assign", "always", "initial", "begin", "end"}:
+        raise Rejected("kernel collides with a reserved SystemVerilog keyword")
     trip = integer(spec["trip_count"], "trip_count", 1, 65536)
     lanes = integer(spec["unroll_factor"], "unroll_factor", 1, 256)
     if lanes > trip:
