@@ -28,7 +28,8 @@ const checkRange = (r, label) => {
     Reflect.ownKeys(r).length===2,
     label + ' must be an exact finite bigint range');
   const d=Object.getOwnPropertyDescriptors(r);
-  requireValid(Object.hasOwn(d.min,'value') && Object.hasOwn(d.max,'value') &&
+  requireValid(Object.hasOwn(d,'min') && Object.hasOwn(d,'max') &&
+    Object.hasOwn(d.min,'value') && Object.hasOwn(d.max,'value') &&
     typeof d.min.value==='bigint' && typeof d.max.value==='bigint' &&
     d.min.value<=d.max.value,
     label + ' must use stable own bigint data properties');
