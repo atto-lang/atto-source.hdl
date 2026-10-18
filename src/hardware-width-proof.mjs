@@ -1,3 +1,4 @@
+import {isProxy} from 'node:util/types';
 // Hardware-only finite-range width planning. No RTL is generated here.
 // Proven mathematical no-overflow is required: general Oreslang int and
 // fixed-width wrapping semantics must never be silently reinterpreted.
@@ -8,12 +9,23 @@ const bounds = (bits, signed) => signed ?
   {min:0n,max:(1n<<BigInt(bits))-1n};
 const checkWidth = bits => requireValid(Number.isSafeInteger(bits) && bits>=1 && bits<=128,
   'reference bits must be a safe integer in 1..128');
+const snapshotOptions = (value, keys) => {
+  requireValid(!isProxy(value) && value !== null && typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null),
+    'width proof options must be a plain data record');
+  const d=Object.getOwnPropertyDescriptors(value);
+  requireValid(Reflect.ownKeys(d).length===keys.length &&
+    keys.every(k=>Object.hasOwn(d,k) && Object.hasOwn(d[k],'value')),
+    'width proof options must have exact own data properties');
+  return Object.fromEntries(keys.map(k=>[k,d[k].value]));
+};
 const checkRange = (r, label) => {
   // Read descriptors once: accessor-backed ranges can change between
   // admission and arithmetic, producing an unsound width certificate.
-  requireValid(r !== null && typeof r==='object' && !Array.isArray(r) &&
+  requireValid(!isProxy(r) && r !== null && typeof r==='object' && !Array.isArray(r) &&
     (Object.getPrototypeOf(r)===Object.prototype || Object.getPrototypeOf(r)===null) &&
-    Object.keys(r).sort().join(',')==='max,min',
+    Reflect.ownKeys(r).length===2,
     label + ' must be an exact finite bigint range');
   const d=Object.getOwnPropertyDescriptors(r);
   requireValid(Object.hasOwn(d.min,'value') && Object.hasOwn(d.max,'value') &&
@@ -37,7 +49,9 @@ function config(c){
 }
 // Values of an n-bit counter are modeled as 0..maxInclusive including the
 // terminal value. This is NOT a general counter code generator.
-export function proveBoundedCounter({target,referenceBits,maxInclusive}){
+export function proveBoundedCounter(options={}) {
+  const {target,referenceBits,maxInclusive}=
+    snapshotOptions(options,['target','referenceBits','maxInclusive']);
   const cfg={target,referenceBits,signed:false};config(cfg);
   requireValid(typeof maxInclusive==='bigint' && maxInclusive>=0n,
     'static nonnegative bigint counter bound required');
@@ -47,7 +61,9 @@ export function proveBoundedCounter({target,referenceBits,maxInclusive}){
     signed:false,range:Object.freeze({min:'0',max:maxInclusive.toString()}),
     proof:'exact static bounded unsigned range; no overflow'});
 }
-export function proveNarrowArithmetic({target,operation,left,right,signed,referenceBits}){
+export function proveNarrowArithmetic(options={}) {
+  const {target,operation,left,right,signed,referenceBits}=
+    snapshotOptions(options,['target','operation','left','right','signed','referenceBits']);
   const cfg={target,referenceBits,signed};config(cfg);
   requireValid(['add','sub','mul'].includes(operation), 'unknown hardware operation');
   left=checkRange(left,'left');right=checkRange(right,'right');
