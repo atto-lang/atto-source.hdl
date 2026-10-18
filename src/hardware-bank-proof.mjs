@@ -7,13 +7,17 @@ const integer = (n,min,max) => Number.isSafeInteger(n) && n>=min && n<=max;
 function snapshotRecord(o, keys, label) {
   // Stable plain data records only. Proxies and hostile host objects are not
   // a supported proof input: use decoded plain records from a trusted parser.
+  const shapeError=label==='memory access' ?
+    'only static exact address/kind supported' : label+' must be a plain record';
+  const dataError=label==='memory access' ?
+    'accessor-backed memory access not admitted' : label+' must have exact own data properties';
   requireProof(o!==null && typeof o==='object' && !Array.isArray(o) &&
     (Object.getPrototypeOf(o)===Object.prototype || Object.getPrototypeOf(o)===null),
-    label+' must be a plain record');
+    shapeError);
   const d=Object.getOwnPropertyDescriptors(o);
   requireProof(Reflect.ownKeys(d).length===keys.length &&
     keys.every(k=>Object.hasOwn(d,k) && Object.hasOwn(d[k],'value')),
-    label+' must have exact own data properties');
+    dataError);
   return Object.fromEntries(keys.map(k=>[k,d[k].value]));
 }
 function snapshotArray(a, max, label) {
