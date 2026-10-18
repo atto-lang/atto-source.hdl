@@ -89,3 +89,11 @@ A locally executed Node 22 run of the **exact Git blob contents** passed 6/6 tes
 ### Additional differential stress (October 18)
 
 The banking test suite now also compares **10,000 deterministic multi-cycle input plans** against an independent read/write/total-port and same-address hazard oracle. Local exact-Git-blob Node 22 execution: **7/7 tests passed**, including exhaustive small-address 1/2/4-bank cases and the 10k deterministic cases (randomized order generated from a fixed seed). The checked-in test Git blob was verified against the local bytes. No real RTL/FPGA/ASIC or runner execution is inferred.
+
+## October 18 proof hardening — accessor denial and immutable certificates
+
+The width helper now captures input range bounds from **own data property descriptors** exactly once; it rejects accessor-backed, inherited or prototype-forged ranges before interval arithmetic. Counter and arithmetic output range objects are frozen together with the outer proof. The banking planner likewise snapshots each access's own `address` and `kind` descriptors before computing ports and collisions, without invoking accessors. Its returned schedule entries, rows and outer schedule are immutable.
+
+The checked-in test module `tests/hardware-proof-accessor-hardening.test.mjs` adds six adversarial cases for getter calls, forged/inherited access fields, accepted null-prototype data records and attempted proof rewriting.
+
+**Local Node 22 replay:** all **18/18 HDL proof tests passed**, including exhaustive unsigned 1..8-bit arithmetic, signed 1..6-bit arithmetic, deterministic 10,000 multi-cycle bank schedules and six new adversarial cases. Every test and implementation file used in this replay matched its GitHub Git blob SHA at the tested head. This is source-local proof-model evidence, not synthesis, actual Oreslang frontend compilation or a hosted CI success.
