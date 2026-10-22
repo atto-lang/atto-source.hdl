@@ -150,9 +150,14 @@ fn as_map(value:&Json)->Result<&BTreeMap<String,Json>,String>{
 fn get<'a>(m:&'a BTreeMap<String,Json>,name:&str)->Result<&'a Json,String>{
     m.get(name).ok_or_else(||format!("missing {name}"))
 }
+// Python's JSON decoder treats the grammatically valid integer -0 as zero.
+fn parse_unsigned(raw:&str)->Result<u128,String>{
+    if raw=="-0" {return Ok(0)}
+    raw.parse().map_err(|_|"invalid unsigned JSON integer".into())
+}
 fn unsigned(value:&Json,name:&str,lo:u128,hi:u128)->Result<u128,String>{
     let Json::Num(raw)=value else{return Err(format!("{name} must be an integer"))};
-    let v:u128=raw.parse().map_err(|_|format!("{name} not an unsigned integer"))?;
+    let v=parse_unsigned(raw).map_err(|_|format!("{name} not an unsigned integer"))?;
     if v<lo||v>hi{return Err(format!("{name} outside [{lo},{hi}]"))}
     Ok(v)
 }
@@ -168,7 +173,7 @@ fn range_value(value:&Json,name:&str,width:u32,signed:bool)->Result<i128,String>
         if v<min||v>max{return Err(format!("{name} exceeds width"))}
         Ok(v)
     }else{
-        let v:u128=raw.parse().map_err(|_|format!("{name} out of u128 range"))?;
+        let v=parse_unsigned(raw).map_err(|_|format!("{name} out of u128 range"))?;
         let max=if width==128{u128::MAX}else{(1u128<<width)-1};
         if v>max{return Err(format!("{name} exceeds width"))}
         Ok(i128::try_from(v).unwrap_or(i128::MAX))
@@ -201,7 +206,7 @@ fn validate(document:&Json)->Result<String,String>{
     if !signed{
         let (Json::Num(a),Json::Num(b))=(get(m,"value_min")?,get(m,"value_max")?)
             else{return Err("invalid unsigned ranges".into())};
-        if a.parse::<u128>().unwrap()>b.parse::<u128>().unwrap(){
+        if parse_unsigned(a)?>parse_unsigned(b)?{
             return Err("inverted unsigned range".into())
         }
     }
@@ -271,6 +276,7 @@ mod tests{
     #[test]
     fn admits_real_example_without_hardware_claims(){
         let report=validate_bytes(GOOD.as_bytes()).unwrap();
+        assert!(validate_bytes(change("value_min","0","-0").as_bytes()).is_ok());
         assert!(report.contains("STATIC_PREFLIGHT_ONLY"));
         assert!(report.contains(r#""synthesized": false"#));
         assert!(report.contains("[1, 1, 1, 1]"));
