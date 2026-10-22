@@ -19,3 +19,12 @@ jobs:
           persist-credentials: false
       - name: Run bounded standalone preflight tests (not performance benchmarks)
         run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Rust static HLS intent verifier negative coverage
+        run: cargo test --offline --manifest-path tools/hls-intent-preflight/Cargo.toml
+      - name: Exact-output differential against retained Python oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/validate_optimization_intent.py examples/bounded_add.intent.json > "$RUNNER_TEMP/hls-python.json"
+          cargo run --quiet --offline --manifest-path tools/hls-intent-preflight/Cargo.toml -- examples/bounded_add.intent.json > "$RUNNER_TEMP/hls-rust.json"
+          diff -u "$RUNNER_TEMP/hls-python.json" "$RUNNER_TEMP/hls-rust.json"
