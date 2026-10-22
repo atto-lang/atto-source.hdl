@@ -78,3 +78,42 @@ test("bitvector arithmetic oracle covers wraparound, underflow and u64 precision
     }
   }
 });
+
+test("compiler metadata must be plain owned data, never executable host objects", () => {
+  let executed = 0;
+  const getters = {};
+  Object.defineProperty(getters, "entry", {
+    enumerable: true,
+    get() { executed++; return "add8"; }
+  });
+  assert.throws(() => compileSource(source, getters), /H007/);
+  assert.equal(executed, 0, "compiler invoked an options getter");
+
+  const badProto = Object.create({entry: "add8"});
+  assert.throws(() => compileSource(source, badProto), /H007/);
+  assert.throws(() => compileSource(source, new Date()), /H007/);
+  assert.throws(() => compileSource(source, null), /H007/);
+  assert.throws(() => compileSource(source, 17), /H007/);
+  assert.throws(() => compileSource(source, {entry: null}), /H007/);
+  assert.throws(() => compileSource(source, {entry: undefined}), /H007/);
+  assert.throws(() => compileSource(source, {entry: "add8", privileged: true}), /H007/);
+  assert.throws(() => compileSource(source, {[Symbol("entry")]: "add8"}), /H007/);
+  assert.throws(() => compileSource(source, {entry: "add8\\u0000"}), /H007/);
+
+  const hostile = new Proxy({entry: "add8"}, {
+    get() { executed++; throw Error("getter trap executed"); },
+    getPrototypeOf() { executed++; throw Error("prototype trap executed"); },
+    ownKeys() { executed++; throw Error("ownKeys trap executed"); },
+  });
+  assert.throws(() => compileSource(source, hostile), /H007/);
+  const revoked = Proxy.revocable({entry: "add8"}, {});
+  revoked.revoke();
+  assert.throws(() => compileSource(source, revoked.proxy), /H007/);
+  assert.equal(executed, 0, "compiler invoked an options Proxy trap");
+
+  const plain = Object.create(null);
+  plain.entry = "add8";
+  assert.equal(compileSource(source, plain).module, "add8");
+  assert.equal(compileSource(source, {entry: "add8"}).module, "add8");
+  assert.equal(compileSource(source).module, "add8");
+});
