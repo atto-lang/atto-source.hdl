@@ -1,21 +1,24 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "stage": "experimental-hdl-source",
   "sourceRepository": "ores-truffle-oreslang/oreslang-source.hdl",
-  "sourceCommit": "14325a6688c52156bef52eccbecf610ea6350d83",
+  "sourceCommit": null,
+  "sourceCommitStatus": "unverified-exact-head",
   "toolchain": {
-    "node": ">=20",
+    "node": ">=22",
     "iverilog": "required for RTL gate",
     "yosys": "required for synthesis gate"
   },
   "verification": {
-    "softwareReference": "65,536 u8 vectors verified in connector isolate; not CI",
+    "softwareReference": "unverified on this exact private source head",
     "rtlSimulation": "unverified",
-    "synthesis": "unverified"
+    "synthesis": "unverified",
+    "evidencePolicy": "exact source SHA/tree may be certified only by a stepful exact-head workflow receipt"
   },
   "restrictions": [
     "not integrated with Oreslang typed frontend",
     "no FPGA bitstream",
-    "no ASIC signoff"
+    "no ASIC signoff",
+    "source-free carrier probes are not exact-source certification"
   ]
 }
