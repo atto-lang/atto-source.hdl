@@ -1,0 +1,8 @@
+# Hardware lowering/proof, integration tooling, tests, and CI trust boundaries.
+/.github/workflows/ @ORESoftware
+/.github/CODEOWNERS @ORESoftware
+/src/ @ORESoftware
+/tests/ @ORESoftware
+/tools/ @ORESoftware
+/scripts/ @ORESoftware
+/package.json @ORESoftware
