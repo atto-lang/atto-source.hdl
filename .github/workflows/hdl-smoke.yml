@@ -1,0 +1,54 @@
+name: Experimental HDL Compiler RTL Verification
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact source checkout
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git diff --quiet --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"
+          echo "HDL_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: JavaScript unit and reference-oracle checks
+        run: npm test
+      - name: Install open RTL tools
+        run: sudo apt-get update && sudo apt-get install -y iverilog yosys
+      - name: Compile exact source and compare pinned generated RTL
+        run: |
+          node bin/oreslang-hdl.mjs tests/fixtures/add8.ores /tmp/oreslang_add8.sv
+          diff -u tests/fixtures/add8.generated.sv /tmp/oreslang_add8.sv
+          sha256sum /tmp/oreslang_add8.sv
+      - name: Exhaustive RTL simulation of 65,536 input pairs
+        run: |
+          set -o pipefail
+          iverilog -g2012 -s tb -o /tmp/oreslang_tb /tmp/oreslang_add8.sv tests/add8_tb.sv
+          vvp /tmp/oreslang_tb | tee /tmp/sim.log
+          grep -Fx HDL_ADD8_65536_PASS /tmp/sim.log
+      - name: Synthesize exact compiler-emitted RTL
+        run: yosys -Q -T -p 'read_verilog -sv /tmp/oreslang_add8.sv; hierarchy -check -top ores_add8; proc; opt; check -assert; synth -top ores_add8; check -assert; stat'
+      - name: Cross-width RTL differential simulation and synthesis
+        run: node tests/rtl-matrix.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: oreslang-add8-rtl-provenance
+          path: /tmp/oreslang_add8.sv
+          retention-days: 14
