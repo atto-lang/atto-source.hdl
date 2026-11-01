@@ -35,6 +35,9 @@ while IFS= read -r -d '' entry; do
     done
   fi
   [[ -f "$path" && ! -L "$path" ]] || fail "missing or symlinked tracked file: $path"
+  # Git does not record hardlink identity; an external alias can mutate a verified file.
+  link_count="$(stat -c %h -- "$path" 2>/dev/null || stat -f %l "$path" 2>/dev/null)" || fail "cannot inspect tracked file link count: $path"
+  [[ "$link_count" == "1" ]] || fail "tracked file has an unexpected hardlink: $path"
   # Compare the physical bytes, not a clean-filter-normalized Git view.
   # git hash-object --path silently launders modifications through .gitattributes
   # and configured filter.*.clean commands (git diff can hide them too).
