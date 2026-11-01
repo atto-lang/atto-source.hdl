@@ -26,7 +26,10 @@ while IFS= read -r -d '' entry; do
   blob="${rest%% *}"
   [[ "$mode" == '100644' || "$mode" == '100755' ]] || fail "forbidden Git entry mode $mode: $path"
   [[ -f "$path" && ! -L "$path" ]] || fail "missing or symlinked tracked file: $path"
-  actual_blob="$(git hash-object --path="$path" -- "$path")" || fail "cannot hash tracked file: $path"
+  # Compare the physical bytes, not a clean-filter-normalized Git view.
+  # git hash-object --path silently launders modifications through .gitattributes
+  # and configured filter.*.clean commands (git diff can hide them too).
+  actual_blob="$(git hash-object --no-filters -- "$path")" || fail "cannot hash tracked file: $path"
   [[ "$actual_blob" == "$blob" ]] || fail "physical file contents differ from pinned blob: $path"
   if [[ "$mode" == '100755' ]]; then
     [[ -x "$path" ]] || fail "executable bit missing: $path"
