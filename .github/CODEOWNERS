@@ -6,5 +6,11 @@
 /tools/ @ORESoftware
 /scripts/ @ORESoftware
 /package.json @ORESoftware
+
+# Hardware proof receipts, executable entrypoints and integration metadata.
+/.oreslang/ @ORESoftware
+/bin/ @ORESoftware
+/verification/ @ORESoftware
+/verification-status.json @ORESoftware
 /.github/private-ci-approved-repositories.txt @ORESoftware
 /.github/workflows/private-ci-policy.yml @ORESoftware
