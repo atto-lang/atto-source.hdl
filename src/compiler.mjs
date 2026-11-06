@@ -43,8 +43,23 @@ export function lex(source) {
   tokens.push({value:'<eof>',offset:source.length});
   return tokens;
 }
+// cpu/gpu/quantum are reserved execution-domain words across all Oreslang
+// backends (Java and LLVM reject them as identifiers). This RTL subset lowers
+// no execution region or CPU/GPU Task, so each fails with a dedicated
+// diagnostic instead of an incidental unbound-name or syntax error.
+const EXECUTION_DOMAIN_WORDS=new Set(['cpu','gpu','quantum']);
+function rejectExecutionDomains(ts) {
+  for(let k=0;k<ts.length;k++) {
+    const t=ts[k],opensBlock=ts[k+1]?.value==='{';
+    if(EXECUTION_DOMAIN_WORDS.has(t.value))
+      fail('HDL_EXECUTION_DOMAIN',t,'execution domain '+t.value+' is reserved and not lowered to RTL; no implicit host fallback');
+    if((t.value==='task'||t.value==='nb')&&opensBlock)
+      fail('HDL_EXECUTION_DOMAIN',t,'execution task requires scheduler-aware Future lowering; not lowered to RTL');
+  }
+}
 export function parseHardwareSource(source) {
   const ts=lex(source); let i=0;
+  rejectExecutionDomains(ts);
   const peek=()=>ts[i],take=()=>ts[i++];
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
