@@ -28,3 +28,15 @@ This README describes the repository's intended responsibilities. Feature suppor
 - [Language specification](https://github.com/atto-lang/atto-spec)
 - [Platform conformance](https://github.com/atto-lang/atto-platform-conformance)
 - [Commercial infrastructure](https://github.com/atto-co)
+
+## Repository ownership and contribution routing
+
+**Belongs here:** HDL-target language subset, high-level-to-RTL lowering, hardware ABI, synthesis constraints and negative compile fixtures.
+
+**Belongs elsewhere:** FPGA board deployment belongs in atto-platform.fpga; ASIC implementation constraints in atto-platform.asic; portable language rules in atto-spec.
+
+**Security and portability boundary:** Do not silently reinterpret dynamic/actor semantics as synthesizable; reject unsupported allocations, host I/O and unschedulable concurrency.
+
+AttoLang is the public name; preserve existing Oreslang/.ores compatibility and use canonical .atto for new portable library source. This README defines scope, not feature readiness.
+
+**Acceptance:** name exact source SHA/tree, runtime/toolchain, positive and negative checks and execution receipt before claiming support. Host-only tests and empty CI steps do not prove guest execution.
