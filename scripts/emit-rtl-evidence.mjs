@@ -52,9 +52,15 @@ export function createRtlEvidence({env=process.env,read=readFileSync,run=command
   if(!exactlyOne(logs.formal,
     'HDL_SAT_EQUIVALENCE_PASS: 15 complete-width proofs; 1 mutated RTL counterexample'))
     reject('missing real SAT equivalence plus negative-mutant sentinel');
-  if(!/End of script\. Logfile hash:/i.test(logs.synthesis) ||
-     !/Printing statistics/i.test(logs.synthesis))
-    reject('Yosys synthesis log missing successful synthesis epilogue');
+  // CI invokes Yosys with -T, which suppresses its optional end-of-script
+  // footer. The preceding pipefail-bound synthesis command must exit zero.
+  // Check for actual synthesis/stat and clean design reports, not a footer.
+  if(!/=== ores_add8 ===/.test(logs.synthesis) ||
+     !/Number of cells:/i.test(logs.synthesis) ||
+     !/Found and reported 0 problems\./i.test(logs.synthesis) ||
+     !/Printing statistics/i.test(logs.synthesis) ||
+     /ERROR:|warning:.*latch/i.test(logs.synthesis))
+    reject('Yosys synthesis log missing successful netlist and design-check witnesses');
   const yosys=run('yosys',['-V']).split('\n')[0];
   const iverilog=run('iverilog',['-V']).split('\n')[0];
   const node=run('node',['--version']).split('\n')[0];
