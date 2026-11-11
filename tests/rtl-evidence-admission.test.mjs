@@ -19,7 +19,7 @@ const data=()=>({
   '/tmp/sim.log':'HDL_ADD8_65536_PASS\n',
   '/tmp/rtl-matrix.log':'RTL_MATRIX_PASS: 1035 vectors across 15 synthesized designs\n',
   '/tmp/rtl-formal.log':'HDL_SAT_EQUIVALENCE_PASS: 15 complete-width proofs; 1 mutated RTL counterexample\n',
-  '/tmp/yosys-synth.log':'Printing statistics\nEnd of script. Logfile hash: aaaaaa\n'
+  '/tmp/yosys-synth.log':'=== ores_add8 ===\nNumber of cells: 1\nFound and reported 0 problems.\nPrinting statistics\n'
 });
 const commands=(name,args)=>{
   const k=name+' '+args.join(' ');
@@ -78,7 +78,10 @@ test('receipts deny source drift, RTL drift and incomplete execution logs',()=>{
     ['/tmp/sim.log','HDL_ADD8_65536_PASS\nHDL_ADD8_65536_PASS\n'],
     ['/tmp/rtl-matrix.log','RTL_MATRIX_PASS: 69 vectors across 1 synthesized designs\n'],
     ['/tmp/rtl-formal.log','HDL_SAT_EQUIVALENCE_PASS: 15 complete-width proofs; 0 mutated RTL counterexample\n'],
-    ['/tmp/yosys-synth.log','ERROR: command failed']
+    ['/tmp/yosys-synth.log','ERROR: command failed'],
+    ['/tmp/yosys-synth.log','Printing statistics\nEnd of script. Logfile hash: bad\n'],
+    ['/tmp/yosys-synth.log','=== ores_add8 ===\nNumber of cells: 1\nFound and reported 1 problems.\nPrinting statistics\n'],
+    ['/tmp/yosys-synth.log','=== ores_add8 ===\nNumber of cells: 1\nFound and reported 0 problems.\nERROR: missing technology mapping\nPrinting statistics\n']
   ]){
     const altered={...data(),[path]:value};
     assert.throws(()=>prove({files:altered}),/HDL_EVIDENCE_DENIED/,path);
