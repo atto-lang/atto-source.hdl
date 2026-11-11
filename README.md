@@ -1,5 +1,7 @@
 # Oreslang HDL compiler — experimental source-to-SystemVerilog
 
+**Canonical runtime terminology (2026-11-11): TenantVM** is the per-tenant execution boundary in AttoLang generally, but this HDL compiler does **not** implement TenantVM or actor execution. See [TenantVM naming](docs/TENANT_VM_NAMING_V1.md); unsupported runtime constructs must continue to fail closed.
+
 This repository now contains a **working standalone experimental source-subset compiler**. It is NOT integrated with the main Java/LLVM Oreslang compiler or common HIR/MIR, and is NOT evidence of FPGA or ASIC execution.
 
 Supported source: one `pub fnc` or `fnc`, one or more `u1..u64` unsigned parameters, matching return type, and a single return expression using input parameters, `+`, `-` and parentheses. All operands have equal widths and arithmetic wraps modulo 2^width. Unsupported features, actors and dynamic effects fail closed.
