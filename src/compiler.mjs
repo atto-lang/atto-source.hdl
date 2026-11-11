@@ -43,6 +43,10 @@ export function lex(source) {
         spelling==='^^'?'Xor(a,b)':'Integer.bitXor(a,b)';
       fail('HDL_REMOVED_OPERATOR',{offset:m.index},spelling+' is removed from AttoLang; use '+replacement);
     }
+    if(value==='&' || value==='|')
+      fail('HDL_UNLOWERED_SOURCE_OPERATOR',{offset:m.index},
+        value==='|'?'AttoLang logical OR is not integer bitwise OR; typed boolean lowering is unavailable':
+          'AttoLang borrow operator is not integer bitwise AND; typed ownership lowering is unavailable');
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
@@ -120,8 +124,7 @@ export function parseHardwareSource(source) {
     return a;
   }
   const additive=(depth)=>binaryLayer(primary,['+','-'],depth);
-  const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
-  const expression=(depth=0)=>binaryLayer(bitAnd,['|'],depth);
+  const expression=(depth=0)=>additive(depth);
   const expr=expression();expect(';');expect('}');expect('<eof>');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
@@ -162,7 +165,7 @@ export function evaluateReference(program,inputs){
       return n;
     }
     const a=go(e.left),b=go(e.right);
-    const value=e.op==='+'?a+b:e.op==='-'?a-b:e.op==='&'?a&b:e.op==='^'?a^b:e.op==='|'?a|b:null;
+    const value=e.op==='+'?a+b:e.op==='-'?a-b:e.op==='^'?a^b:null;
     if(value===null)throw new TypeError('unsupported operator '+e.op);
     return value&mask;
   }
