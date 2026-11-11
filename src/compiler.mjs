@@ -36,6 +36,13 @@ export function lex(source) {
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
+    // A match/default control-flow expression cannot be treated as an
+    // RTL wire name, and a tilde literal cannot become a unary bit operator.
+    // Comments have already been removed from the lexer stream above.
+    if(value==='match') fail('HDL_MATCH_DEFAULT_UNSUPPORTED',{offset:m.index},
+      'typed match requires checked combinational selector, exhaustiveness and effect-free arm lowering');
+    if(value==='~') fail('HDL_TILDE_AGGREGATE_UNSUPPORTED',{offset:m.index},
+      'typed Map/Record requires owned aggregate storage and not combinational RTL');
     if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
