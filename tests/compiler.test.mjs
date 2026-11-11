@@ -58,9 +58,9 @@ test('RTL-reserved identifiers and malformed source fail closed',()=>{
 test('bitwise precedence and 64-bit oracle preserve fixed-width semantics',()=>{
   const cases=[
     ['a | b & c',{a:1n,b:2n,c:0n},1n],
-    ['a ^ b & c',{a:3n,b:3n,c:1n},2n],
+    ['Integer.bitXor(a, b & c)',{a:3n,b:3n,c:1n},2n],
     ['a + b & c',{a:255n,b:1n,c:3n},0n],
-    ['a | b ^ c',{a:1n,b:3n,c:2n},1n],
+    ['a | Integer.bitXor(b, c)',{a:1n,b:3n,c:2n},1n],
     ['(a | b) & c',{a:1n,b:2n,c:2n},2n]
   ];
   for(const [expr,inputs,expected] of cases){
@@ -69,9 +69,10 @@ test('bitwise precedence and 64-bit oracle preserve fixed-width semantics',()=>{
   }
   const {program}=compileSource('fnc f(u64 a, u64 b): u64 { return a - b; }');
   assert.equal(evaluateReference(program,{a:0n,b:1n}),(1n<<64n)-1n);
-  for(const op of ['&','|','^']){
-    const {program:p,systemVerilog}=compileSource('fnc f(u64 a, u64 b): u64 { return a '+op+' b; }');
-    assert.ok(systemVerilog.includes(' '+op+' '));
+  for(const op of ['&','|','bitXor']){
+    const expr=op==='bitXor'?'Integer.bitXor(a,b)':'a '+op+' b';
+    const {program:p,systemVerilog}=compileSource('fnc f(u64 a, u64 b): u64 { return '+expr+'; }');
+    assert.ok(systemVerilog.includes(' '+(op==='bitXor'?'^':op)+' '));
     assert.equal(evaluateReference(p,{a:(1n<<64n)-1n,b:1n}),op==='&'?1n:op==='|'?(1n<<64n)-1n:(1n<<64n)-2n);
   }
 });
