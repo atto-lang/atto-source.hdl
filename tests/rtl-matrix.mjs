@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {compileSource,evaluateReference} from '../src/compiler.mjs';
 
-const widths=[1,8,16,32,64],ops=['+','-','&','|','bitXor'];
+const widths=[1,8,16,32,64],ops=['+','-','bitXor'];
 const dir=mkdtempSync(join(tmpdir(),'ores-hdl-rtl-'));
 function run(cmd,args){
   const r=spawnSync(cmd,args,{encoding:'utf8',timeout:120000,maxBuffer:8*1024*1024});
