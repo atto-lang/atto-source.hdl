@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError} from '../src/compiler.mjs';
+import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError,TENANT_VM_RUNTIME_SUPPORT} from '../src/compiler.mjs';
+
+test('TenantVM and actor execution fail closed in HDL compiler',()=>{
+  assert.equal(TENANT_VM_RUNTIME_SUPPORT,'UNSUPPORTED');
+  assert.throws(()=>compileSource('define actor Worker as end'),HardwareSourceError);
+  assert.throws(()=>compileSource('define tenant_vm Evil as end'),HardwareSourceError);
+});
 
 const source=readFileSync(new URL('./fixtures/add8.ores', import.meta.url),'utf8');
 const {program,systemVerilog}=compileSource(source);
