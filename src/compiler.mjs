@@ -32,11 +32,17 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^%.]|./gy;
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^%.])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(value==='%' || value==='^') {
+      const spelling=value==='^' && source.startsWith('^^',m.index)?'^^':value;
+      const replacement=spelling==='%'?'Integer.rem(a,b) or Integer.mod(a,b)':
+        spelling==='^^'?'Xor(a,b)':'Integer.bitXor(a,b)';
+      fail('HDL_REMOVED_OPERATOR',{offset:m.index},spelling+' is removed from AttoLang; use '+replacement);
+    }
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
@@ -82,6 +88,22 @@ export function parseHardwareSource(source) {
   function primary(depth){
     if(depth>MAX_DEPTH)fail('HDL_DEPTH',peek(),'expression nesting limit');
     if(peek().value==='('){take();const e=expression(depth+1);expect(')');return e;}
+    if(peek().value==='Integer' && ts[i+1]?.value==='.'){
+      const where=take();take();
+      const member=take();
+      if(member.value!=='bitXor')
+        fail('HDL_INTRINSIC',member,'only Integer.bitXor is supported by this HDL subset');
+      if(symbols.has('Integer'))
+        fail('HDL_INTRINSIC_SHADOW',where,'Integer intrinsic conflicts with an input named Integer');
+      expect('(');
+      const a=expression(depth+1);expect(',');
+      const b=expression(depth+1);expect(')');
+      if(a.width!==b.width)
+        fail('HDL_MISMATCH',member,'Integer.bitXor requires equal unsigned bit widths');
+      if(++expressionNodes>MAX_EXPR_NODES)
+        fail('HDL_EXPR_LIMIT',member,'expression too complex');
+      return {kind:'binary',op:'^',left:a,right:b,width:a.width};
+    }
     const t=take(),bits=symbols.get(t.value);
     if(bits===undefined)fail('HDL_UNBOUND',t,'undeclared or unsupported expression '+t.value);
     return {kind:'input',name:t.value,width:bits};
@@ -99,8 +121,7 @@ export function parseHardwareSource(source) {
   }
   const additive=(depth)=>binaryLayer(primary,['+','-'],depth);
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
-  const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
-  const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
+  const expression=(depth=0)=>binaryLayer(bitAnd,['|'],depth);
   const expr=expression();expect(';');expect('}');expect('<eof>');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
