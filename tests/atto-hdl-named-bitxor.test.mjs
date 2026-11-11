@@ -60,3 +60,10 @@ test('removed punctuation inside comments does not change admission',()=>{
   assert.match(emitSystemVerilog(program),/in_a \^ in_b/);
   assert.equal(evaluateReference(program,{a:5n,b:3n}),6n);
 });
+
+test('language operators are not silently reinterpreted as bitwise hardware',()=>{
+  for(const expr of ['a & b','a | b','(a | b)','Integer.bitXor(a,b) & a','a | Integer.bitXor(a,b)'])
+    assert.throws(()=>compileSource(src(expr)),rejects('HDL_UNLOWERED_SOURCE_OPERATOR'),expr);
+  const source='fnc f(u8 a,u8 b):u8 { /* a | b and a & b */ return a+b; }';
+  assert.equal(evaluateReference(compileSource(source).program,{a:2n,b:5n}),7n);
+});
