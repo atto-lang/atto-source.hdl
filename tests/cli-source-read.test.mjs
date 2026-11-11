@@ -65,3 +65,25 @@ test('CLI preserves an existing output file and does not overwrite it',()=>{
     assert.equal(readFileSync(output,'utf8'),'ORIGINAL OUTPUT\n');
   });
 });
+
+test('CLI denies language-operator collisions before creating hardware artifacts',()=>{
+  fixture(({source,output,run})=>{
+    for(const expression of ['a | b','a & b','a ^ b','a ^^ b','a % b']){
+      writeFileSync(source,'pub fnc f(u8 a,u8 b):u8 { return '+expression+'; }');
+      const result=run();
+      assert.equal(result.status,1,result.stderr+' / '+expression);
+      assert.match(result.stderr,/HDL_(?:UNLOWERED_SOURCE_OPERATOR|REMOVED_OPERATOR)/);
+      assert.equal(existsSync(output),false,'a rejected source emitted RTL: '+expression);
+    }
+  });
+});
+
+test('CLI accepts canonical .atto file and emits XOR only through named intrinsic',()=>{
+  fixture(({dir,output,run})=>{
+    const canonical=join(dir,'program.atto');
+    writeFileSync(canonical,'fnc f(u8 a,u8 b):u8 { return Integer.bitXor(a,b); }');
+    const result=run(canonical);
+    assert.equal(result.status,0,result.stderr);
+    assert.match(readFileSync(output,'utf8'),/assign out_result = \(in_a \^ in_b\);/);
+  });
+});
