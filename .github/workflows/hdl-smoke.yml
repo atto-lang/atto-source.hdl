@@ -50,6 +50,12 @@ jobs:
         run: yosys -Q -T -p 'read_verilog -sv /tmp/oreslang_add8.sv; hierarchy -check -top ores_add8; proc; opt; check -assert; synth -top ores_add8; check -assert; stat'
       - name: Cross-width RTL differential simulation and synthesis
         run: node tests/rtl-matrix.mjs
+      - name: Prove RTL equivalence with Yosys SAT and kill negative mutant
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/rtl-formal-equivalence.mjs | tee /tmp/rtl-formal.log
+          grep -Fx 'HDL_SAT_EQUIVALENCE_PASS: 15 complete-width proofs; 1 mutated RTL counterexample' /tmp/rtl-formal.log
       - name: Emit exact-head evidence receipt after all RTL gates
         shell: bash
         env:
@@ -59,7 +65,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
           RTL_SHA256="$(sha256sum /tmp/oreslang_add8.sv | awk '{print $1}')"
-          printf '{"schemaVersion":1,"sourceCommit":"%s","sourceTree":"%s","rtlSha256":"%s","rtlSimulation":"passed","synthesis":"passed","crossWidthRtlMatrix":"passed","evidenceClass":"RTL_SIMULATION_AND_GENERIC_SYNTHESIS_ONLY"}\n' \
+          printf '{"schemaVersion":1,"sourceCommit":"%s","sourceTree":"%s","rtlSha256":"%s","rtlSimulation":"passed","synthesis":"passed","crossWidthRtlMatrix":"passed","formalEquivalence":"passed","formalProofs":15,"negativeMutantsKilled":1,"evidenceClass":"RTL_SIMULATION_GENERIC_SYNTHESIS_SAT_EQUIVALENCE_ONLY"}\n' \
             "$EXPECTED_HEAD" "$SOURCE_TREE" "$RTL_SHA256" > /tmp/hdl-evidence.json
           cat /tmp/hdl-evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -68,4 +74,5 @@ jobs:
           path: |
             /tmp/oreslang_add8.sv
             /tmp/hdl-evidence.json
+            /tmp/rtl-formal.log
           retention-days: 14
