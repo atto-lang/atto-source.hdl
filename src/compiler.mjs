@@ -57,9 +57,21 @@ function rejectExecutionDomains(ts) {
       fail('HDL_EXECUTION_DOMAIN',t,'execution task requires scheduler-aware Future lowering; not lowered to RTL');
   }
 }
+// The HDL combinational compiler cannot represent application-domain mutable
+// state or Symbol identity. Fail closed using already lexed, trivia-free tokens.
+function rejectUnloweredSingleton(ts) {
+  for(let i=0;i<ts.length;i++){
+    if(ts[i].value!=='define')continue;
+    const next=ts[i+1]?.value==='pub'?i+2:i+1;
+    if(ts[next]?.value==='singleton')
+      fail('HDL_SINGLETON_UNSUPPORTED',ts[next],
+        'singleton declaration requires actor-domain identity, ownership and runtime synchronization; RTL lowering unsupported');
+  }
+}
 export function parseHardwareSource(source) {
   const ts=lex(source); let i=0;
   rejectExecutionDomains(ts);
+  rejectUnloweredSingleton(ts);
   const peek=()=>ts[i],take=()=>ts[i++];
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
