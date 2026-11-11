@@ -34,7 +34,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y iverilog yosys
       - name: Compile exact source and compare pinned generated RTL
         run: |
-          node bin/oreslang-hdl.mjs tests/fixtures/add8.ores /tmp/oreslang_add8.sv
+          node bin/oreslang-hdl.mjs tests/fixtures/add8.atto /tmp/oreslang_add8.sv
+          node bin/oreslang-hdl.mjs tests/fixtures/add8.ores /tmp/oreslang_add8_legacy.sv
+          cmp tests/fixtures/add8.atto tests/fixtures/add8.ores
+          cmp /tmp/oreslang_add8.sv /tmp/oreslang_add8_legacy.sv
           diff -u tests/fixtures/add8.generated.sv /tmp/oreslang_add8.sv
           sha256sum /tmp/oreslang_add8.sv
       - name: Exhaustive RTL simulation of 65,536 input pairs
