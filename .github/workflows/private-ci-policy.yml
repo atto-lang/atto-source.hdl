@@ -1,4 +1,4 @@
-name: Private CI deny-by-default policy
+name: Private CI reviewed exact-destination policy
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  private-ci-deny-default:
+  private-ci-allowlist-audit:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -47,14 +47,10 @@ jobs:
               if (bad || workflows != 1 || owners != 1 || allowlist != 1 || policy != 1) exit 1
             }
           ' "$file"
-      - name: Require private source export to remain disabled
+      - name: Verify exact private CI destination allowlist (no transfer)
         shell: bash
         run: |
           set -euo pipefail
-          file=.github/private-ci-approved-repositories.txt
-          test -f "$file"
-          if grep -Ev '^[[:space:]]*(#.*)?$' "$file" | grep -q .; then
-            echo "PRIVATE_CI_EXPORT_REJECTED: active destination requires dedicated reviewed authorization machinery" >&2
-            exit 1
-          fi
-          echo "private CI export policy: disabled by default"
+          node scripts/validate-ci-export-policy.mjs
+          node --test tests/ci-export-policy.test.mjs
+          echo 'POLICY_ONLY: source export is not performed by this workflow'
