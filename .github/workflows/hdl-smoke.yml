@@ -47,26 +47,29 @@ jobs:
           vvp /tmp/oreslang_tb | tee /tmp/sim.log
           grep -Fx HDL_ADD8_65536_PASS /tmp/sim.log
       - name: Synthesize exact compiler-emitted RTL
-        run: yosys -Q -T -p 'read_verilog -sv /tmp/oreslang_add8.sv; hierarchy -check -top ores_add8; proc; opt; check -assert; synth -top ores_add8; check -assert; stat'
+        shell: bash
+        run: |
+          set -euo pipefail
+          yosys -Q -T -p 'read_verilog -sv /tmp/oreslang_add8.sv; hierarchy -check -top ores_add8; proc; opt; check -assert; synth -top ores_add8; check -assert; stat' | tee /tmp/yosys-synth.log
       - name: Cross-width RTL differential simulation and synthesis
-        run: node tests/rtl-matrix.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/rtl-matrix.mjs | tee /tmp/rtl-matrix.log
+          grep -Fx 'RTL_MATRIX_PASS: 1035 vectors across 15 synthesized designs' /tmp/rtl-matrix.log
       - name: Prove RTL equivalence with Yosys SAT and kill negative mutant
         shell: bash
         run: |
           set -euo pipefail
           node tests/rtl-formal-equivalence.mjs | tee /tmp/rtl-formal.log
           grep -Fx 'HDL_SAT_EQUIVALENCE_PASS: 15 complete-width proofs; 1 mutated RTL counterexample' /tmp/rtl-formal.log
-      - name: Emit exact-head evidence receipt after all RTL gates
+      - name: Record exact-head, job-attempt and tool-version-bound evidence
         shell: bash
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
-          RTL_SHA256="$(sha256sum /tmp/oreslang_add8.sv | awk '{print $1}')"
-          printf '{"schemaVersion":1,"sourceCommit":"%s","sourceTree":"%s","rtlSha256":"%s","rtlSimulation":"passed","synthesis":"passed","crossWidthRtlMatrix":"passed","formalEquivalence":"passed","formalProofs":15,"negativeMutantsKilled":1,"evidenceClass":"RTL_SIMULATION_GENERIC_SYNTHESIS_SAT_EQUIVALENCE_ONLY"}\n' \
-            "$EXPECTED_HEAD" "$SOURCE_TREE" "$RTL_SHA256" > /tmp/hdl-evidence.json
+          node scripts/emit-rtl-evidence.mjs
           cat /tmp/hdl-evidence.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -75,4 +78,7 @@ jobs:
             /tmp/oreslang_add8.sv
             /tmp/hdl-evidence.json
             /tmp/rtl-formal.log
+            /tmp/rtl-matrix.log
+            /tmp/sim.log
+            /tmp/yosys-synth.log
           retention-days: 14
