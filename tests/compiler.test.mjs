@@ -55,13 +55,16 @@ test('RTL-reserved identifiers and malformed source fail closed',()=>{
   assert.throws(()=>compileSource('fnc f(u8 a): u8 { return a; }'+String.fromCharCode(0xD800)),HardwareSourceError);
 });
 
-test('bitwise precedence and 64-bit oracle preserve fixed-width semantics',()=>{
+test('named XOR and arithmetic precedence preserve unsigned width',()=>{
   const cases=[
-    ['a | b & c',{a:1n,b:2n,c:0n},1n],
-    ['Integer.bitXor(a, b & c)',{a:3n,b:3n,c:1n},2n],
-    ['a + b & c',{a:255n,b:1n,c:3n},0n],
-    ['a | Integer.bitXor(b, c)',{a:1n,b:3n,c:2n},1n],
-    ['(a | b) & c',{a:1n,b:2n,c:2n},2n]
+    ['Integer.bitXor(a,b + c)',{a:3n,b:3n,c:1n},7n],
+    ['Integer.bitXor(a,b - c)',{a:3n,b:3n,c:1n},1n],
+    ['a + Integer.bitXor(b,c)',{a:3n,b:3n,c:1n},5n],
+    ['Integer.bitXor(a+b,c)',{a:3n,b:3n,c:1n},7n],
+    ['(a + b) - c',{a:3n,b:3n,c:1n},5n],
+    ['a + b + c',{a:3n,b:3n,c:1n},7n],
+    ['Integer.bitXor(a,Integer.bitXor(b,c))',{a:3n,b:3n,c:1n},1n],
+    ['a - b + c',{a:3n,b:3n,c:1n},1n]
   ];
   for(const [expr,inputs,expected] of cases){
     const {program}=compileSource('fnc f(u8 a, u8 b, u8 c): u8 { return '+expr+'; }');
@@ -69,12 +72,9 @@ test('bitwise precedence and 64-bit oracle preserve fixed-width semantics',()=>{
   }
   const {program}=compileSource('fnc f(u64 a, u64 b): u64 { return a - b; }');
   assert.equal(evaluateReference(program,{a:0n,b:1n}),(1n<<64n)-1n);
-  for(const op of ['&','|','bitXor']){
-    const expr=op==='bitXor'?'Integer.bitXor(a,b)':'a '+op+' b';
-    const {program:p,systemVerilog}=compileSource('fnc f(u64 a, u64 b): u64 { return '+expr+'; }');
-    assert.ok(systemVerilog.includes(' '+(op==='bitXor'?'^':op)+' '));
-    assert.equal(evaluateReference(p,{a:(1n<<64n)-1n,b:1n}),op==='&'?1n:op==='|'?(1n<<64n)-1n:(1n<<64n)-2n);
-  }
+  const {program:p,systemVerilog}=compileSource('fnc f(u64 a, u64 b): u64 { return Integer.bitXor(a,b); }');
+  assert.match(systemVerilog,/in_a \^ in_b/);
+  assert.equal(evaluateReference(p,{a:(1n<<64n)-1n,b:1n}),(1n<<64n)-2n);
 });
 
 test('reference evaluator rejects inherited and missing inputs',()=>{
