@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {compileSource} from '../src/compiler.mjs';
+import {requireYosysSatResult} from '../src/formal-proof-result.mjs';
 
 const widths=[1,8,16,32,64];
 const operations=[
@@ -15,31 +16,21 @@ const operations=[
 ];
 const dir=mkdtempSync(join(tmpdir(),'atto-hdl-formal-'));
 const design=join(dir,'design.sv'),spec=join(dir,'spec.sv');
-const script=[
+const script=(expectEquivalent)=>[
   'read_verilog -sv design.sv spec.sv',
   'proc',
   'opt',
   'miter -equiv -make_assert gold ores_f miter',
   'flatten miter',
-  'sat -verify -prove-asserts -show-inputs -show-outputs miter'
+  'sat '+(expectEquivalent?'-verify':'-falsify')+
+    ' -prove-asserts -show-inputs -show-outputs miter'
 ].join('; ');
 function prove(expectEquivalent,context){
-  const run=spawnSync('yosys',['-Q','-T','-p',script],{
+  const run=spawnSync('yosys',['-Q','-T','-p',script(expectEquivalent)],{
     cwd:dir,encoding:'utf8',timeout:90000,maxBuffer:16*1024*1024,
     env:{...process.env,LC_ALL:'C'}
   });
-  if(run.error||run.signal)throw new Error(
-    context+': Yosys unavailable/interrupted: '+(run.error?.message??run.signal));
-  const log=String(run.stdout??'')+'\n'+String(run.stderr??'');
-  if(expectEquivalent){
-    if(run.status!==0 || !/SAT proof finished/i.test(log))
-      throw new Error(context+': SAT proof did not succeed: '+log.slice(-5000));
-  }else{
-    // A killed mutation must fail because of a SAT counterexample, never
-    // merely because the Yosys executable/command/file is missing.
-    if(run.status===0 || !/SAT verification failed|model found|Proof failed|FAIL!/i.test(log))
-      throw new Error(context+': mutation did not yield a genuine SAT counterexample: '+log.slice(-5000));
-  }
+  requireYosysSatResult(run,expectEquivalent,context);
 }
 let proven=0,mutantsKilled=0;
 try{
