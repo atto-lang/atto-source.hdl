@@ -1,4 +1,4 @@
-# Private CI destination authorization — PROPOSED; NOT EFFECTIVE UNTIL MERGED WITH INDEPENDENT REVIEW.
+# Private CI destination authorization - PROPOSED; NOT EFFECTIVE UNTIL MERGED WITH INDEPENDENT REVIEW.
 # Destinations must be private, owned/administered by authorized maintainers and have the exact ID.
 # Source transfer remains prohibited while this change is only a draft PR.
 # Format: exact-owner/exact-repo NUMERIC_REPOSITORY_ID
