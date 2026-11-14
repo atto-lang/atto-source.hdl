@@ -32,7 +32,7 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}\[\]~&|^]|./gy;
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
@@ -64,6 +64,23 @@ export function parseHardwareSource(source) {
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
   const width=()=>{const t=take(),m=/^u([1-9][0-9]*)$/.exec(t.value);if(!m||Number(m[1])>64)fail('HDL_WIDTH',t,'only unsigned u1..u64 are supported');return Number(m[1]);};
+  // File-level exports may precede or follow the hardware scalar fnc.
+  // Package-scoped export is rejected until the RTL linker can enforce it.
+  const fileExports=[];
+  function fileExport() {
+    const at=expect('export');expect('pub');
+    if(peek().value==='[') {
+      take();expect('pkg');expect(']');
+      fail('HDL_PACKAGE_EXPORT_UNSUPPORTED',at,'RTL module has no package-private linker authority');
+    }
+    if(peek().value==='class')
+      fail('HDL_EXPORT_KIND_UNSUPPORTED',peek(),'HDL cannot lower nominal class types');
+    if(peek().value==='fnc')take();
+    const target=ident();expect(';');
+    if(fileExports.includes(target))fail('HDL_EXPORT_DUPLICATE',at,'duplicate export');
+    fileExports.push(target);
+  }
+  while(peek().value==='export')fileExport();
   if(peek().value==='pub')take();
   expect('fnc'); const name=ident();expect('(');
   const params=[];
@@ -101,7 +118,11 @@ export function parseHardwareSource(source) {
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
-  const expr=expression();expect(';');expect('}');expect('<eof>');
+  const expr=expression();expect(';');expect('}');
+  while(peek().value==='export')fileExport();
+  expect('<eof>');
+  if(fileExports.some(exported=>exported!==name))
+    fail('HDL_EXPORT_UNBOUND',{offset:0},'export target must be the compiled fnc');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   return admitProgram({name,params,returnWidth,expression:expr});
