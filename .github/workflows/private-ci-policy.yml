@@ -51,6 +51,22 @@ jobs:
               if (bad || workflows != 1 || owners != 1 || allowlist != 1 || policy != 1) exit 1
             }
           ' "$file"
+      - name: Check allowlist classifier on synthetic input
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="$(mktemp)"
+          trap 'rm -f "$fixture"' EXIT
+          printf '# comment only\n   \n  # second comment\n' > "$fixture"
+          if grep -Evq '^[[:space:]]*(#.*)?$' "$fixture"; then
+            echo "PRIVATE_CI_POLICY_TEST_FAILED: comment-only fixture rejected" >&2
+            exit 1
+          fi
+          printf 'unapproved-org/unapproved-repo\n' >> "$fixture"
+          if ! grep -Evq '^[[:space:]]*(#.*)?$' "$fixture"; then
+            echo "PRIVATE_CI_POLICY_TEST_FAILED: unauthorized destination accepted" >&2
+            exit 1
+          fi
       - name: Require private source export to remain disabled
         shell: bash
         run: |
@@ -59,13 +75,8 @@ jobs:
           test -f "$file"
           test ! -L "$file"
           test "$(stat -c %s -- "$file")" -le 65536
-          # Use single-process grep to avoid upstream SIGPIPE under pipefail.
-          if grep -Evq '^[[:space:]]*(#.*)?
-            echo "PRIVATE_CI_EXPORT_REJECTED: active destination requires dedicated reviewed authorization machinery" >&2
-            exit 1
-          fi
-          echo "private CI export policy: disabled by default"
- "$file"; then
+          # Single-process anchored match is fail-closed under pipefail.
+          if grep -Evq '^[[:space:]]*(#.*)?$' "$file"; then
             echo "PRIVATE_CI_EXPORT_REJECTED: active destination requires dedicated reviewed authorization machinery" >&2
             exit 1
           fi
