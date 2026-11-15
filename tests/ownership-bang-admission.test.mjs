@@ -31,3 +31,15 @@ test('whitespace before bang is not the ownership operator', () => {
     err => err instanceof HardwareSourceError &&
       err.code !== 'HDL_OWNERSHIP_UNSUPPORTED');
 });
+
+test('nested block comments are inert and bounded before RTL emission', () => {
+  const nested='pub fnc main(u8 item): u8 { /* outer /* borrow! mut item */ '+
+    'inner tail /* copy!item */ */ return item; }';
+  const parsed=parseHardwareSource(nested);
+  assert.equal(parsed.returnWidth,8);
+  assert.doesNotThrow(() => lex(nested));
+  assert.throws(() => lex('/* outer /* borrow! item */'), err =>
+    err instanceof HardwareSourceError && err.code === 'HDL_COMMENT');
+  assert.throws(() => lex('/*'.repeat(65)+'*/'.repeat(65)), err =>
+    err instanceof HardwareSourceError && err.code === 'HDL_COMMENT_LIMIT');
+});
