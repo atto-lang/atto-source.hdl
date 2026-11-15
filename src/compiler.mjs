@@ -31,6 +31,11 @@ export class HardwareSourceError extends Error {
 const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);};
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
+  // Reject Trojan Source reordering controls even in comments/ignored text.
+  // U+200E/200F and U+061C are directional marks; U+202A..202E and
+  // U+2066..2069 control embedding, overrides and isolates.
+  if (/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(source))
+    fail('HDL_BIDI_CONTROL',{offset:0},'bidirectional Unicode formatting control in source');
   const tokens=[];
   const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
   for(const m of source.matchAll(re)) {
