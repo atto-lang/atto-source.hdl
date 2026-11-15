@@ -36,6 +36,13 @@ export function lex(source) {
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
+    if(['copy','take','borrow','share'].includes(value) &&
+       source[m.index+value.length]==='!' &&
+       source[m.index+value.length+1]!=='=' &&
+       !(source.slice(m.index+value.length+1,m.index+value.length+3)==='eq' &&
+         !/[A-Za-z0-9_]/.test(source[m.index+value.length+3]??'')))
+      fail('HDL_OWNERSHIP_UNSUPPORTED',{offset:m.index},
+           'OWNERSHIP_BANG_BACKEND_UNSUPPORTED: typed ownership has no SystemVerilog lowering');
     if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
