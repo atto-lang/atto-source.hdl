@@ -35,3 +35,25 @@ test('long left-associated chains refuse before immutable admission or RTL emiss
     }
   }
 });
+
+
+test('exact 64-level expression budget admits RTL; level 65 fails closed',()=>{
+  for(const operator of ['+','-','&','^','|']) {
+    const accepted=chain(64,operator);
+    const program=parseHardwareSource(accepted);
+    assert.ok(Object.isFrozen(program.expression));
+    assert.match(emitSystemVerilog(program),/assign out_result =/);
+    assert.equal(typeof evaluateReference(program,{a:1n,b:2n}),'bigint');
+    assert.match(compileSource(accepted).systemVerilog,/endmodule/);
+
+    const rejected=chain(65,operator);
+    for(const compile of [parseHardwareSource,compileSource]) {
+      assert.throws(
+        ()=>compile(rejected),
+        error=>error instanceof HardwareSourceError &&
+          error.code==='HDL_DEPTH' &&
+          /constructed expression AST depth limit/.test(error.message)
+      );
+    }
+  }
+});
