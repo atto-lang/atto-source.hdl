@@ -31,11 +31,42 @@ export class HardwareSourceError extends Error {
 const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);};
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
+  // Hide comments before tokenization without changing source offsets. HDL
+  // accepts the same bounded nested block comments as the JS frontends;
+  // a regex ending at the first */ could otherwise expose ownership-looking
+  // tokens in the still-commented suffix as executable source.
+  const masked=source.split('');
+  const blank=(start,end)=>{
+    for(let p=start;p<end;p++)if(source[p]!=='\n'&&source[p]!=='\r')masked[p]=' ';
+  };
+  for(let i=0;i<source.length;){
+    if(source.startsWith('//',i)){
+      const start=i;
+      while(i<source.length&&source[i]!=='\n'&&source[i]!=='\r')i++;
+      blank(start,i);
+      continue;
+    }
+    if(source.startsWith('/*',i)){
+      const start=i;
+      let depth=0;
+      do{
+        if(i>=source.length)fail('HDL_COMMENT',{offset:start},'unterminated block comment');
+        if(source.startsWith('/*',i)){
+          if(++depth>64)fail('HDL_COMMENT_LIMIT',{offset:start},'block comment nesting exceeds 64');
+          blank(i,i+2);i+=2;
+        }else if(source.startsWith('*/',i)){
+          --depth;blank(i,i+2);i+=2;
+        }else{blank(i,i+1);i++;}
+      }while(depth>0);
+      continue;
+    }
+    i++;
+  }
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
-  for(const m of source.matchAll(re)) {
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  for(const m of masked.join('').matchAll(re)) {
     const value=m[0];
-    if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
+    if(/^\s+$/.test(value)) continue;
     if(['copy','take','borrow','share'].includes(value) &&
        source[m.index+value.length]==='!' &&
        source[m.index+value.length+1]!=='=' &&
