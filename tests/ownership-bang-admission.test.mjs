@@ -9,6 +9,8 @@ test('HDL never emits RTL for unsupported copy/take/borrow/share', () => {
     'copy!item', 'take!item', 'borrow!item', 'borrow! item',
     'borrow!mut item', 'borrow! mut item',
     'mut borrow!item', 'mut borrow! item', 'share!item',
+    'borrow!\nmut item', 'borrow!/* checked loan */mut item',
+    'mut borrow!\nitem',
   ]) {
     for (const compile of [lex,parseHardwareSource]) {
       assert.throws(() => compile(source(expression)),
