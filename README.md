@@ -2,6 +2,14 @@
 
 Experimental hardware-description compilation backend for AttoLang.
 
+## Naming and specification migration
+
+This is the canonical [AttoLang backend repository](https://github.com/atto-lang/atto-source.hdl). Use `.atto` for portable AttoLang source and update local remotes to `https://github.com/atto-lang/atto-source.hdl.git`; do not use historical repository links or naming in new examples.
+
+- **Normative grammar and semantics:** [atto-spec](https://github.com/atto-lang/atto-spec). Check the current versioned contracts for ownership operations (`borrow!`, `take!`, `share!`, `copy!`, `copy!!`), implicit argument borrowing, `lt!` binders, `eq`/`neq` value equality, `susp` effects and file/module `define const`. These are *specification targets*, not claims of executable support in this backend.
+- **Positive and negative guest execution evidence:** [atto-platform-conformance](https://github.com/atto-lang/atto-platform-conformance) and [atto-compilers-parity-testing](https://github.com/atto-lang/atto-compilers-parity-testing). Report `passed`, `failed`, `unsupported` or `not executed`, and pin exact compiler, source tree, target and toolchain.
+- **Portable shared sources and target constraints:** [atto-common-source](https://github.com/atto-lang/atto-common-source) and [atto-target-profiles](https://github.com/atto-lang/atto-target-profiles). Keep backend-specific gaps explicit, and do not infer guest parity from host tests or zero-step CI runs.
+
 ## Scope
 
 This repository is the AttoLang ecosystem home for:
@@ -37,6 +45,6 @@ This README describes the repository's intended responsibilities. Feature suppor
 
 **Security and portability boundary:** Do not silently reinterpret dynamic/actor semantics as synthesizable; reject unsupported allocations, host I/O and unschedulable concurrency.
 
-AttoLang is the public name; preserve existing Oreslang/.ores compatibility and use canonical .atto for new portable library source. This README defines scope, not feature readiness.
+AttoLang is the canonical project identity. Use `.atto` source and `atto-*` naming for all new documentation and portable library code. This README defines scope, not feature readiness.
 
 **Acceptance:** name exact source SHA/tree, runtime/toolchain, positive and negative checks and execution receipt before claiming support. Host-only tests and empty CI steps do not prove guest execution.
