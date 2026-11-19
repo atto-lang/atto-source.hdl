@@ -1,3 +1,5 @@
+> **AI agent instructions (organization-wide):** Before working on code, issues, or pull requests, read and follow the [organization `AGENTS.md`](https://github.com/ores-truffle-oreslang/.github/blob/main/AGENTS.md), including its **merge-first stealth-development policy**. Honor any repository-local `AGENTS.md`, explicit holds, and GitHub-enforced rules.
+
 # AttoLang HDL compiler — experimental source-to-SystemVerilog (legacy checkout)
 
 ## AttoLang migration and authoritative specification (2026-11-18)
