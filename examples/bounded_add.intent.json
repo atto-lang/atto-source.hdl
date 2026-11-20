@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "kernel": "bounded_add",
+  "trip_count": 64,
+  "unroll_factor": 4,
+  "word_width": 7,
+  "signed": false,
+  "value_min": 0,
+  "value_max": 100,
+  "target_ii": 1,
+  "loop_carried_dependency": false,
+  "bank_count": 4,
+  "read_ports_per_bank": 1,
+  "concurrent_read_indices": [
+    0,
+    1,
+    2,
+    3
+  ]
+}
