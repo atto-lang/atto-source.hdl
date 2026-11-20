@@ -1,0 +1,4 @@
+source-rtl	hdl	execution
+arithmetic-oracle	hdl	execution
+unsupported-hdl	hdl	execution
+negative-admission	hdl	rejection
