@@ -53,6 +53,13 @@ function rejectExecutionDomains(ts) {
     const t=ts[k],opensBlock=ts[k+1]?.value==='{';
     if(EXECUTION_DOMAIN_WORDS.has(t.value))
       fail('HDL_EXECUTION_DOMAIN',t,'execution domain '+t.value+' is reserved and not lowered to RTL; no implicit host fallback');
+    // The synthesizable RTL profile has no logical TaskId, Future,
+    // TaskScope, cancellation or safe inline suspension lowering. Refuse
+    // canonical Atto task prefixes explicitly instead of treating them as
+    // host-side expressions or RTL identifiers.
+    if(t.value==='sync'||t.value==='await')
+      fail('HDL_TASK_UNSUPPORTED',t,
+        'sync/await task requires Atto caller-identity and TaskScope semantics; no RTL lowering');
     if((t.value==='task'||t.value==='nb')&&opensBlock)
       fail('HDL_EXECUTION_DOMAIN',t,'execution task requires scheduler-aware Future lowering; not lowered to RTL');
   }
