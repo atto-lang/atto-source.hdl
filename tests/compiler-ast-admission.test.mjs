@@ -4,6 +4,14 @@ import {parseHardwareSource,emitSystemVerilog,evaluateReference,HardwareSourceEr
   from '../src/compiler.mjs';
 
 const source='pub fnc add(u8 a,u8 b): u8 { return a+b; }';
+test('bang exceptional controls are explicit backend denials before RTL',()=>{
+  for(const op of ['trap!','throw!','raise!','panic!']){
+    const source='pub fnc main(u8 a):u8{return '+op+' a;}';
+    assert.throws(()=>parseHardwareSource(source),e=>
+      e instanceof HardwareSourceError && e.code==='HDL_EXCEPTION_BANG_UNSUPPORTED');
+  }
+});
+
 const denied=e=>e instanceof HardwareSourceError && e.code==='HDL_UNVERIFIED_AST';
 
 test('parser-admitted program and nested input/expression trees are immutable',()=>{
