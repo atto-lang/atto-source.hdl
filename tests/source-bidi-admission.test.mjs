@@ -32,3 +32,20 @@ test('Bidi controls are refused at their exact UTF-16 position, even after astra
         && error.offset === source.indexOf(ch), 'U+'+cp.toString(16));
   }
 });
+
+
+test('NEL, Unicode line and paragraph separators fail closed before RTL emission', () => {
+  for (const cp of [0x0085, 0x2028, 0x2029]) {
+    const ch = String.fromCodePoint(cp);
+    for (const source of [
+      safe+' /* café 😀 '+ch+' */',
+      '// misplaced '+ch+'\n'+safe,
+      safe+' // '+ch,
+    ]) {
+      assert.throws(() => compileSource(source), error =>
+        error instanceof HardwareSourceError
+          && error.code === 'HDL_SOURCE_LINE_CONTROL'
+          && error.offset === source.indexOf(ch), 'U+'+cp.toString(16));
+    }
+  }
+});

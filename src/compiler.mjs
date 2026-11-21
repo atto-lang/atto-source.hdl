@@ -37,6 +37,11 @@ export function lex(source) {
   const bidiOffset = source.search(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u);
   if(bidiOffset>=0)
     fail('HDL_BIDI_CONTROL',{offset:bidiOffset},'bidirectional Unicode formatting control in source');
+  // Unicode NEL/LS/PS can disguise line/comment boundaries in source views.
+  // Reject before lexer whitespace and comment recognition.
+  const lineControlOffset = source.search(/[\u0085\u2028\u2029]/u);
+  if(lineControlOffset>=0)
+    fail('HDL_SOURCE_LINE_CONTROL',{offset:lineControlOffset},'Unicode line separator in source');
   // Source text admitted by the scalar JS frontend must not be allowed to
   // disguise terminal ESC/DEL inside lexically ignored HDL comments.
   const controlOffset = source.search(/[\x1b\x7f]/);
