@@ -25,5 +25,5 @@ test('ordinary source spacing remains lexable', () => {
 test('valid RTL remains emit-able after rejecting source control attacks', () => {
   const {systemVerilog}=compileSource('fnc plus(u8 a, u8 b): u8 { return a + b; }');
   assert.match(systemVerilog, /module ores_plus\(/);
-  assert.doesNotMatch(systemVerilog, /(?:\\x1b|\\x7f)/);
+  assert.doesNotMatch(systemVerilog, /[\x1b\x7f]/);
 });
