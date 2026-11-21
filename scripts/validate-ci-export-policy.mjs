@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 
 const MAX_SIZE=4096;
-const CANONICAL_DESTINATION='gha-indie-worker/gha-indie-worker-docs';
-const CANONICAL_ID='1351003564';
+const CANONICAL_DESTINATION='ores-rate-limit-test/atto-ci';
+const CANONICAL_ID='1460083010';
 
 export function parsePrivateCiDestinations(raw){
   if(typeof raw!=='string'||raw.length>MAX_SIZE ||raw.length===0 ||
