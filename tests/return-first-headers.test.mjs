@@ -17,6 +17,8 @@ const positive=[
   'pub u8 <- add(u8 a,u8 b) begin return a+b; end;',
   'fnc u8 • add(u8 a,u8 b) return a+b; end.',
   'pub fnc u8 <- add(u8 a,u8 b) begin return a+b; end.',
+  'pub fnc add(u8 a,u8 b) -> u8 {return a+b;}',
+  'pub fnc add(u8 a,u8 b): u8 -> {return a+b;}',
 ];
 const original=parseHardwareSource(legacy);
 const rtl=emitSystemVerilog(original);
@@ -45,6 +47,9 @@ test('invalid arrows, widths and mixed width expressions fail before emitting RT
     ['u8 <- add(u8 a,u8 b) return a+b; end..','HDL_SYNTAX'],
     ['u8 <- add(u8 a,u8 b) return a+b; end;;','HDL_SYNTAX'],
     ['u8 <- add(u8 a,u8 b){return a+b;}.','HDL_SYNTAX'],
+    ['pub fnc add(u8 a,u8 b):u8 -> -> {return a+b;}','HDL_SYNTAX'],
+    ['pub fnc add(u8 a,u8 b):u8 -> {return a+b;} trailing','HDL_SYNTAX'],
+    ['pub fnc add(u8 a,u8 b):u8 -> {return a+b;}.','HDL_SYNTAX'],
   ];
   for(const [source,code] of negative){
     assert.throws(()=>parseHardwareSource(source),e=>
@@ -62,6 +67,9 @@ test('bounded return-first infer proves the exact unsigned width and same emitte
     'pub fnc infer • add(u8 a,u8 b){return a+b;}',
     'infer <- add(u8 a,u8 b) begin return a+b; end.',
     'pub fnc infer • add(u8 a,u8 b) return a+b; end;',
+    'fnc add(u8 a,u8 b): infer -> {return a+b;}',
+    'fnc add(u8 a,u8 b) -> infer {return a+b;}',
+    'fnc add(u8 a,u8 b): infer {return a+b;}',
   ]){
     const actual=parseHardwareSource(source);
     assert.equal(actual.returnWidth,8,source);
@@ -78,6 +86,8 @@ test('return-first infer rejects unbound, ambiguous and unsupported expressions'
     ['infer <- add(u65 a,u65 b){return a+b;}','HDL_WIDTH'],
     ['infer <- add(u8 a,u8 b):u8{return a+b;}','HDL_SYNTAX'],
     ['infer <- add(u8 a,u8 b){return trap! a;}','HDL_EXCEPTION_BANG_UNSUPPORTED'],
+    ['fnc add(u8 a,u8 b): infer -> {return missing;}','HDL_UNBOUND'],
+    ['fnc add(u8 a,u8 b): infer -> {return a+b;} trailing','HDL_SYNTAX'],
   ];
   for(const [source,code] of negatives)
     assert.throws(()=>parseHardwareSource(source),
