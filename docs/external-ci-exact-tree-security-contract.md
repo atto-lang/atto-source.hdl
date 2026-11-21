@@ -36,6 +36,26 @@ The mirrored `.github/workflows/` files stayed *nested data*;
 the executable check was separately authored inside the destination
 root `.github/workflows/`.
 
+## Actual HDL toolchain on the proposed recipient (synthetic only)
+
+A fresh, destination-owned [Actions run #44954684950](https://github.com/ores-rate-limit-test/atto-ci/actions/runs/44954684950)
+completed **SUCCESS with nine executed job steps** on an exact checkout
+of the destination source-free verification branch
+`b102ba5b6cccb98a40db8d9c5bc81e13c93284b2`.
+The job independently checked the SHA-exact synthetic mirror subtree,
+installed **Icarus Verilog 12.0 and Yosys 0.33**, simulated **all 65,536**
+pairs for a generated 8-bit adder, synthesized the circuit, verified
+the positive SAT equivalence and required a **failed SAT proof on a
+deliberate XOR-based mutant**. Real stdout/log sentinels:
+`HDL_SYNTHETIC_65536_VECTORS_PASS` and
+`HDL_SYNTHETIC_YOSYS_POSITIVE_AND_MUTANT_SAT_PASS`.
+
+This only verifies the carrier environment and the self-contained
+synthetic RTL. It proves **nothing** about the private HDL compiler
+at the pending source PR. No private Atto compiler file or RTL fixture
+was copied. The carrier's correct SAT toolchain does not discharge
+the source's independently protected export approval or source CI.
+
 **These four files were purpose-written synthetic test material only.**
 They contain **zero private Atto compiler code/RTL/fixtures**, and the
 successful run is **CARRIER_ADMISSION_AND_SHA_TRANSPORT_ONLY**.
