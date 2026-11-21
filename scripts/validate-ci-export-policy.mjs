@@ -9,7 +9,7 @@ const CANONICAL_ID='1460083010';
 
 export function parsePrivateCiDestinations(raw){
   if(typeof raw!=='string'||raw.length>MAX_SIZE ||raw.length===0 ||
-     !raw.endsWith('\n')||raw.includes('\r') || /[^\x09\x0a\x20-\x7e]/.test(raw))
+     !raw.endsWith('\n')||raw.includes('\r') || raw.includes('\\n') || /[^\x09\x0a\x20-\x7e]/.test(raw))
     throw new Error('PRIVATE_CI_POLICY_DENIED: invalid UTF-8/size/canonical line endings');
   const entries=[];
   for(const line of raw.slice(0,-1).split('\n')){
@@ -39,6 +39,6 @@ if(process.argv[1]&&resolve(process.argv[1])===new URL(import.meta.url).pathname
   try{
     const entries=validatePrivateCiDestinations(
       readFileSync('.github/private-ci-approved-repositories.txt','utf8'));
-    console.log('PRIVATE_CI_DESTINATION_POLICY_VALID: '+(entries[0]?.name??'disabled by default'));
+    console.log('PRIVATE_CI_POLICY_SYNTAX_ONLY_NO_EXPORT_AUTHORITY: '+(entries[0]?.name??'disabled by default'));
   }catch(e){console.error(e.message);process.exitCode=1;}
 }
