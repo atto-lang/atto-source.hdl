@@ -34,8 +34,14 @@ export function lex(source) {
   // Reject Trojan Source reordering controls even in comments/ignored text.
   // U+200E/200F and U+061C are directional marks; U+202A..202E and
   // U+2066..2069 control embedding, overrides and isolates.
-  if (/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(source))
-    fail('HDL_BIDI_CONTROL',{offset:0},'bidirectional Unicode formatting control in source');
+  const bidiOffset = source.search(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u);
+  if(bidiOffset>=0)
+    fail('HDL_BIDI_CONTROL',{offset:bidiOffset},'bidirectional Unicode formatting control in source');
+  // Source text admitted by the scalar JS frontend must not be allowed to
+  // disguise terminal ESC/DEL inside lexically ignored HDL comments.
+  const controlOffset = source.search(/[\x1b\x7f]/);
+  if(controlOffset>=0)
+    fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   const tokens=[];
   const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
   for(const m of source.matchAll(re)) {

@@ -10,7 +10,8 @@ test('HDL source refuses Trojan Source bidi controls before tokenization', () =>
     const control = String.fromCodePoint(cp);
     for (const source of [safe + '// ' + control, '/* ' + control + ' */ ' + safe]) {
       assert.throws(() => compileSource(source), error =>
-        error instanceof HardwareSourceError && error.code === 'HDL_BIDI_CONTROL',
+        error instanceof HardwareSourceError && error.code === 'HDL_BIDI_CONTROL'
+          && error.offset === source.indexOf(control),
         'U+' + cp.toString(16));
     }
   }
@@ -18,4 +19,16 @@ test('HDL source refuses Trojan Source bidi controls before tokenization', () =>
 
 test('ordinary non-ASCII comments are not rejected', () => {
   assert.doesNotThrow(() => compileSource(safe + ' // café'));
+});
+
+
+test('Bidi controls are refused at their exact UTF-16 position, even after astral text', () => {
+  const prelude = '/* café 😀 */ ';
+  for (const cp of bidiControls) {
+    const ch = String.fromCodePoint(cp);
+    const source = prelude + safe + ' // ' + ch;
+    assert.throws(() => compileSource(source), error =>
+      error instanceof HardwareSourceError && error.code === 'HDL_BIDI_CONTROL'
+        && error.offset === source.indexOf(ch), 'U+'+cp.toString(16));
+  }
 });
