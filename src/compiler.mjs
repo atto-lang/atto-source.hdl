@@ -36,6 +36,12 @@ export function lex(source) {
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
+    // The RTL subset has no import linker, allocator or hosted/actor runtime.
+    // Reject an actual import token *before* the quote/path lexer error, so
+    // canonical atto.core/alloc/std requests cannot be mistaken for supported
+    // freestanding libraries or emit a partial hardware artifact.
+    if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
+      'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
     if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
