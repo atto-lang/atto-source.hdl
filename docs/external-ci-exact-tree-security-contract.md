@@ -1,37 +1,112 @@
-# External private GitHub Actions for AttoLang HDL — proposed review contract
+# External private GitHub Actions for AttoLang HDL — independently reviewed carrier grant
 
-**Status:** DRAFT / SECURITY REVIEW REQUIRED. This document does **not** authorize private source transfer while its PR is unmerged or lacks independent approval from @ORESoftware. The source repository's current `main` policy is DENY-ALL.
+**Status: DRAFT / NOT AUTHORIZED FOR PRIVATE SOURCE EXPORT.**
+This document belongs to [atto-source.hdl#29](https://github.com/atto-lang/atto-source.hdl/pull/29).
+The current source **protected main** allowlist denies all private CI exports.
+Do not use an unmerged PR branch as permission to export private source.
 
-## Why this is proposed
+## Newly verified private runner and Git-object transport
 
-GitHub-hosted Actions in `ores-truffle-oreslang/oreslang-source.hdl` are failing before runner admission: `steps=null`. A separate **source-free** control has actually executed successfully: `gha-indie-worker/gha-indie-worker-docs` workflow run [42964513228](https://github.com/gha-indie-worker/gha-indie-worker-docs/actions/runs/42964513228), four executed steps, job success. This proves only the availability of the destination runner, **not** the ability to execute source HDL, simulate RTL or validate ASIC/FPGA claims.
+Proposed recipient: **`ores-rate-limit-test/atto-ci`**, immutable GitHub repository
+ID **`1460083010`**, presently private and writable through the owner's
+GitHub connector. This proposed replacement supersedes the historical
+`gha-indie-worker/gha-indie-worker-docs` candidate in this PR; it does
+not transfer or authorize any source.
 
-## Explicit review authorization boundary
+Three independently executed current private-carrier proofs from 2026-11-21:
 
-- Proposed destination: `gha-indie-worker/gha-indie-worker-docs`, numeric GitHub repository ID **`1351003564`**, **private**. Current source repo is also private.
-- Owners must verify the destination repository's ID, private visibility, billing, permissions, administrators, retention settings, branch restrictions, allowed Actions and artifact access immediately before any transfer. The destination's name alone is not sufficient.
-- `/.github/private-ci-approved-repositories.txt` on the **merged, trusted source default branch** must list this exact name and ID, and the policy/workflow edit must have an **independent APPROVED review** by @ORESoftware. An approved comment on an unmerged draft is insufficient.
-- Before approval/merge, transfer of even one compiler source file, RTL fixture, generated artifact or Git blob from this private source repository to that destination remains **prohibited**, including writing content into issue comments, logs or artifact archives.
-- Authorization covers this source repository and this destination only; it grants no blanket approval to export unrelated private repositories or secrets. If source policy is revoked, halt further transfers.
+1. [sonus-auris-test/atto-ci#44954059125](https://github.com/sonus-auris-test/atto-ci/actions/runs/44954059125):
+   no-source Linux capacity probe, seven actual successful job steps,
+   4/4 Node SHA/mode/collision tests.
+2. [ores-rate-limit-test/atto-ci#44954299083](https://github.com/ores-rate-limit-test/atto-ci/actions/runs/44954299083):
+   exact **four-file synthetic root-tree** transplant from
+   `sonus-auris-test/atto-ci` using only authenticated GitHub
+   connector blob/tree/commit operations, six successful job steps,
+   4/4 Node tests, no cross-org checkout/PAT/secrets.
+3. [ores-rate-limit-test/atto-ci#44954478181](https://github.com/ores-rate-limit-test/atto-ci/actions/runs/44954478181):
+   **destination-owned** workflow verifies a **non-executable mirrored
+   subtree**, every one of the four blob SHA identities, modes, file
+   count and subtree SHA. Six successful steps, 4/4 Node tests.
 
-## Transfer design (only after authorization)
+The source and destination synthetic Git trees were independently verified
+at SHA `d98fcd0434345fc957d5b93f5797a06590e8f8b6`.
+The destination subtree is
+`mirrors/atto-hdl/5aba488d684280b0a6034556bc8be950687aab9e/`.
+The mirrored `.github/workflows/` files stayed *nested data*;
+the executable check was separately authored inside the destination
+root `.github/workflows/`.
 
-1. Pin a specific immutable HDL PR head **commit SHA**, its **root tree SHA**, and byte SHA-256 hashes of canonical `.atto` input, legacy `.ores` input and pinned expected RTL from source Git. Do not copy from a moving branch ref after pinning.
-2. Review the tree manifest first: enumerate `git/trees/<commit>?recursive=1`, reject `truncated=true`, submodules (`160000`), symbolic links (`120000`), LFS pointers and unexpectedly large/unrecognized files, and require full blob count and byte accounting. No credentials, environment files or hidden private files may be added to the mirror.
-3. In the authorized destination, create a **new, clearly marked, nonproduction private review branch**; use the destination API to create *only* Git blobs and a subtree named `mirrors/atto-hdl/<pinned-head>/`. Do not transfer source workflow YAML into the **top-level** destination `.github/workflows/`. Do not use cross-org checkout tokens or personal access tokens in destination Actions.
-4. Verify each destination blob's Git SHA matches the source blob SHA and verify the entire mirrored subtree Git tree SHA equals the pinned source root Git tree SHA. Independently check the expected total file count, original executable/file modes and immutable source commit/tree.
-5. Run only a **reviewed, destination-owned, pinned workflow** with `permissions: contents: read`, `persist-credentials: false`, no secrets, no `pull_request_target`, no untrusted dynamic command construction, and no execution of source-controlled workflow files. Checkout the destination branch using its own `GITHUB_TOKEN`; verify `HEAD:mirrors/atto-hdl/<pinned-head>` equals source tree **before** any test steps.
-6. Execute actual Node 22 tests, Icarus `iverilog/vvp` RTL reference/differential matrices, Yosys synthesis and Yosys SAT equivalence. Require 15/15 full-width proof passes and one genuine negative-mutant counterexample, with exact log sentinels and enforced nonzero executed job steps. A successful V8 host reference check or synthetic model cannot replace these steps.
-7. Bind proof receipts to source commit/tree, destination HEAD/tree, mirror subtree tree, workflow run ID, attempt number, job ID, workflow version, tool versions, and all log and RTL SHA-256 hashes. Exclude secrets and source text from stdout and preserve reviewed artifacts only within authorized private retention limits.
-8. Any conflict, mismatch, missing witness or changed original PR head yields **NOT_EXECUTED/FAILED**, not an equivalence pass. Never overwrite the original source PR status or impersonate source-org GitHub Checks.
-9. Independently review the artifacts before declaring the draft HDL PR ready, and delete the temporary mirror/branch after evidence retention requirements are met; verify access revocation and repository policy has not changed.
+**These four files were purpose-written synthetic test material only.**
+They contain **zero private Atto compiler code/RTL/fixtures**, and the
+successful run is **CARRIER_ADMISSION_AND_SHA_TRANSPORT_ONLY**.
+It is not `atto-source.hdl` compiler parity or board/ASIC signoff.
 
-## Separate verification classes
+## Exact security and authorization prerequisites
 
-- A source-free destination runner canary is **RUNNER_ADMISSION_ONLY**.
-- Real exact-subtree private CI is **EXECUTED_RTL_SIMULATION_AND_GENERIC_SYNTHESIS** once all required checks execute; SAT adds **FORMAL_RTL_EQUIVALENCE** for supported finite bitvectors.
-- Neither proves integration with canonical typed AttoLang HIR/MIR, FPGA board I/O/timing/electrical constraints or ASIC PDK/DRC/LVS/STA signoff. Those remain independent release gates.
+The following must ALL be satisfied **before** transferring even one
+private Atto source blob, including source-controlled workflows/RTL fixtures:
 
-## Current release hold
+1. The change to `.github/private-ci-approved-repositories.txt` and its
+   policy parser/CI must be independently **APPROVED** by
+   `ORESoftware` (GitHub ID `11139560`), who is not PR author, and
+   **merged into the trusted source repository's protected main**.
+   Verify effective CODEOWNERS/required checks and that the review remains
+   effective. The current draft, comments, synthetic CI and user-specified
+   fallback mechanism do not by themselves remove this repo's export hold.
+2. Re-fetch the **protected main** allowlist after the merge, validate the
+   exact `ores-rate-limit-test/atto-ci 1460083010` tuple and no other
+   entries; abort on mismatch, unverifiable authorization or label/security hold.
+3. Independently verify the target's immutable repository ID, private
+   visibility, collaborators, Actions capacity, retention, artifacts and
+   admin privileges **again** immediately before export. Never rely solely
+   on the slug or success of an old carrier run.
+4. Pin source **HEAD SHA and complete root Git-tree SHA** of the exact
+   HDL candidate. Enumerate every tree entry recursively and reject
+   `truncated=true`, gitlinks/submodules, symlinks, LFS pointers,
+   over-budget blobs, secret-containing paths, missing modes or unknown
+   encodings. Record every expected path, mode, type, blob SHA and size.
+5. Recreate **every** blob in the private approved destination with the
+   GitHub connector, with no cross-org GITHUB_TOKEN checkout, personal
+   token, SSH key or secret transfer. Check each returned destination
+   blob SHA exactly. Build a complete source tree, demand its root
+   SHA equal the pinned source root, then attach that tree only under
+   `mirrors/atto-hdl/<source-head>/` in a new temporary destination
+   branch using a CAS/expected-HEAD update.
+6. The running workflow must be **destination-owned, protected and pinned**.
+   Never promote transferred source `.github/workflows` into
+   executable destination root workflows; never run
+   `pull_request_target` against mutable private source. Checkout
+   the destination branch with destination-local `GITHUB_TOKEN` and
+   `persist-credentials:false`, and re-check exact source subtree
+   Git tree SHA, each critical blob and immutable source commit identity
+   before compiling anything.
+7. Run **real** Node 22 HDL compiler frontend tests, genuine generated RTL
+   simulation with Icarus `iverilog/vvp`, Yosys synthesis and SAT
+   equivalence plus a negative mutated-circuit counterexample. Require
+   the target's full 15/15 required bitwidth checks, strict diagnostics,
+   no RTL artifact on rejected source, and actual stepful Actions job
+   receipts. Missing compiler artifact, failed SAT, empty log or skipped
+   job is NOT a pass. A source-free carrier canary does not qualify.
+8. Evidence must include source HEAD/tree, destination HEAD/tree and
+   subtree SHA, every compared blob, workflow+job+attempt IDs,
+   toolchain versions, log/RTL SHA-256, executed steps and time.
+   No source text/secrets printed in logs. Store only reviewed private
+   artifacts for bounded retention; remove temporary mirror/branch
+   after evidence collection and verify access revocation.
+9. Any inconsistency or approval revocation aborts further transfers.
+   Alternate-org CI is **supplemental**: it cannot satisfy source-org
+   required checks, reviewer rules or merge restrictions by itself.
+   Never push or alter the original source PR during mirroring.
 
-Do not mirror, run guest compiler-backed tests in the destination or merge the source-policy PR before independent security approval and source default-branch merge. Do not merge HDL PR #33, FPGA PR #27 or ASIC PR #28 solely on this canary.
+## Verification classes
+
+- Source-free runner canary: `RUNNER_ADMISSION_ONLY`.
+- SHA-exact synthetic tree/subtree demo: `MIRROR_TRANSPORT_ONLY`.
+- Authorized, executable HDL candidate test: `SOURCE_EXACT_HEAD_RTL_GUEST_CI`
+  **only** after actual source compiler/RTL/Yosys tests genuinely run.
+- FPGA board or ASIC release signoff: **out of scope**.
+
+The existing [bang-keyword compiler draft #21](https://github.com/atto-lang/atto-source.hdl/pull/21)
+and the other `atto-source.*` compiler PRs remain Draft until their
+own source/guest conformance criteria pass. No private-source mirror
+is claimed by this draft security proposal.
