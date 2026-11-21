@@ -4,26 +4,26 @@ import {readFileSync} from 'node:fs';
 import {parsePrivateCiDestinations} from '../scripts/validate-ci-export-policy.mjs';
 
 const canonical=readFileSync(new URL('../.github/private-ci-approved-repositories.txt',import.meta.url),'utf8');
-const expected='gha-indie-worker/gha-indie-worker-docs 1351003564\n';
+const expected='ores-rate-limit-test/atto-ci 1460083010\n';
 
 test('proposed private destination matches its exact numeric repository identity',()=>{
   assert.deepEqual(parsePrivateCiDestinations(canonical),[
-    {name:'gha-indie-worker/gha-indie-worker-docs',id:'1351003564'}
+    {name:'ores-rate-limit-test/atto-ci',id:'1460083010'}
   ]);
   assert.deepEqual(parsePrivateCiDestinations('# disabled by default\n'),[]);
 });
 test('malformed, broadened and alias destinations all fail closed',()=>{
   const variants=[
     expected+expected,
-    'gha-indie-worker/gha-indie-worker-docs 1351003565\n',
-    'gha-indie-worker/not-our-repo 1351003564\n',
-    'ore-truffle-oreslang/oreslang-source.hdl 1351003564\n',
-    'gha-indie-worker/* 1351003564\n',
-    'gha-indie-worker/gha-indie-worker-docs 1351003564 # inline\n',
-    ' gha-indie-worker/gha-indie-worker-docs 1351003564\n',
-    'gha-indie-worker/gha-indie-worker-docs\t1351003564\n',
-    'Gha-indie-worker/gha-indie-worker-docs 1351003564\n',
-    'gha-indie-worker/gha-indie-worker-docs 1351003564\r\n',
+    'ores-rate-limit-test/atto-ci 1351003565\n',
+    'gha-indie-worker/not-our-repo 1460083010\n',
+    'ore-truffle-oreslang/oreslang-source.hdl 1460083010\n',
+    'gha-indie-worker/* 1460083010\n',
+    'ores-rate-limit-test/atto-ci 1460083010 # inline\n',
+    ' ores-rate-limit-test/atto-ci 1460083010\n',
+    'ores-rate-limit-test/atto-ci\t1460083010\n',
+    'Gha-indie-worker/gha-indie-worker-docs 1460083010\n',
+    'ores-rate-limit-test/atto-ci 1460083010\r\n',
     '\ufeff'+expected,
     expected.trim(),
     expected+'# comment\n'+expected,
