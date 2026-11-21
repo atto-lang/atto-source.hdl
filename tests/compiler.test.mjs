@@ -24,6 +24,32 @@ test('subtraction underflows by modular arithmetic',()=>{
   const p=parseHardwareSource('pub fnc sub(u8 a, u8 b): u8 { return a - b; }');
   assert.equal(evaluateReference(p,{a:0n,b:1n}),255n);
 });
+test('actor-owned heap and object allocation fail closed before RTL generation',()=>{
+  const candidates=[
+    'define class Node as int value Node? next end',
+    'define pub class Node as int value end',
+    'pub define actor A as end',
+    'define actor A as end',
+    'pub fnc f(u8 a):u8 { return new Node(a); }'
+  ];
+  for(const source of candidates){
+    assert.throws(()=>compileSource(source),
+      e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_MEMORY_UNSUPPORTED',
+      source);
+    assert.throws(()=>parseHardwareSource(source),
+      e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_MEMORY_UNSUPPORTED',
+      source);
+  }
+  // No SystemVerilog output may be produced for the canonical actor graph.
+  const graph='define class Node as int value Node? next end\\ndefine actor HeapGraphProbe as receive(int m) { let first = new Node(42, none) assert(first.next?.value == 42) } end';
+  assert.throws(()=>compileSource(graph),HardwareSourceError);
+  // Comments never introduce active source authority.
+  assert.doesNotThrow(()=>compileSource(
+    'fnc f(u8 a): u8 { return a; } // define actor HeapGraphProbe as end'));
+  assert.doesNotThrow(()=>compileSource(
+    'fnc f(u8 a): u8 { return a; } /* new Node(a) */'));
+});
+
 test('unsupported syntax and unsafe inputs fail closed',()=>{
   const cases=[
     ['fnc f(u8 a): u16 { return a; }','HDL_RETURN_WIDTH'],
