@@ -40,3 +40,7 @@ SystemVerilog is byte-for-byte identical to an explicitly annotated function
 with the same parameters. Mixed widths, missing inputs, unsupported operators,
 trap effects, and hidden conversions still fail closed. This is not equivalent
 to full dynamic or class/generic `infer` support on software backends.
+
+## Canonical name-first header compatibility
+
+The bounded HDL parser also accepts `fnc add(u8 a, u8 b) -> u8 { ... }`, `fnc add(u8 a, u8 b): u8 -> { ... }` and corresponding `infer` return annotations. `infer` requires the expression to prove a single unsigned width from declared inputs; it is not dynamic inference or implicit casting. These headers produce the identical admitted AST and RTL as `fnc add(u8 a, u8 b): u8 { ... }`. Malformed arrows, unbound names and trailing source fail closed. No executable actor or general-purpose language semantics are claimed.
