@@ -106,7 +106,7 @@ test('canonical typed Topic.try_publish alias fails before any HDL RTL artifact'
     'fnc f(u8 a):u8 {return alias /* outer /* nested */ end */ . try_publish(share! event);}',
     'fnc f(u8 a):u8 {return alias?.try_publish(share! event);}',
     'fnc f(u8 a):u8 {return alias.try_publish;}',
-    '// ignored alias.try_publish(1)?\\u0085fnc f(u8 a):u8 {return other.try_publish(1);}'
+    '// ignored alias.try_publish(1)?\u0085fnc f(u8 a):u8 {return other.try_publish(1);}'
   ]) {
     assert.throws(()=>parseHardwareSource(source),reject,source);
     assert.throws(()=>compileSource(source),reject,source);
