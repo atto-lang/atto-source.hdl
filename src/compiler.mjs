@@ -57,6 +57,18 @@ function rejectExecutionDomains(ts) {
     // TaskScope, cancellation or safe inline suspension lowering. Refuse
     // canonical Atto task prefixes explicitly instead of treating them as
     // host-side expressions or RTL identifiers.
+    // Theater/Director/Ensemble are runtime actor services, not combinational
+    // hardware operations. Reject an explicit actor/supervisor declaration or
+    // actor lifecycle operation before accepting any RTL AST. Do not reserve
+    // unrelated identifiers such as `topic_count` or `supervisor_id`.
+    if ((t.value==='define' && (ts[k+1]?.value==='actor' || ts[k+1]?.value==='supervisor')) ||
+        t.value==='spawn' ||
+        (t.value==='receive' && ts[k+1]?.value==='(') ||
+        (t.value==='ActorGroup' && ts[k+1]?.value==='(') ||
+        (t.value==='Topic' && ts[k+1]?.value==='(') ||
+        (t.value==='Subscription' && ts[k+1]?.value==='('))
+      fail('HDL_ACTOR_UNSUPPORTED',t,
+        'Atto Theater actor, supervisor and typed group/topic lifecycle require a target runtime; no RTL lowering');
     if(t.value==='sync'||t.value==='await')
       fail('HDL_TASK_UNSUPPORTED',t,
         'sync/await task requires Atto caller-identity and TaskScope semantics; no RTL lowering');
