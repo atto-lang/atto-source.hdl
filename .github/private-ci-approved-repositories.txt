@@ -1,6 +1,7 @@
 # Private CI destination authorization - PROPOSED; NOT EFFECTIVE UNTIL MERGED WITH INDEPENDENT REVIEW.
 # Destinations must be private, owned/administered by authorized maintainers and have the exact ID.
-# Source transfer remains prohibited while this change is only a draft PR.\n# A live approval requires ORESoftware's independent APPROVED review and merge to protected main.
+# Source transfer remains prohibited while this change is only a draft PR.
+# A live approval requires ORESoftware's independent APPROVED review and merge to protected main.
 # Format: exact-owner/exact-repo NUMERIC_REPOSITORY_ID
 # No wildcards, users, public repositories or unknown destinations.
 ores-rate-limit-test/atto-ci 1460083010
