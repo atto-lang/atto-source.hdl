@@ -1,12 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,writeFileSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {compileSource,HardwareSourceError} from '../src/compiler.mjs';
 
+const sharedGuest=readFileSync(new URL('./fixtures/atto-theater-v1/checked-i64-terminal.atto',
+                                   import.meta.url),'utf8');
+const fixtureSha=createHash('sha1')
+  .update('blob '+Buffer.byteLength(sharedGuest,'utf8')+String.fromCharCode(0))
+  .update(sharedGuest,'utf8').digest('hex');
 const scenarios=[
   'define actor Worker as end',
   'define supervisor Root as end',
@@ -15,9 +21,11 @@ const scenarios=[
   'pub fnc add(u8 a): u8 { return ActorGroup(a); }',
   'pub fnc add(u8 a): u8 { return Topic(a); }',
   'pub fnc add(u8 a): u8 { return Subscription(a); }',
+  sharedGuest,
 ];
 
 test('Theater/Director/Ensemble source cannot become accidental combinational RTL',()=>{
+  assert.equal(fixtureSha,'8a981a3545e0307387af83b0fc306c012d52f831');
   for(const source of scenarios) {
     assert.throws(()=>compileSource(source),
       e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_UNSUPPORTED',source);
