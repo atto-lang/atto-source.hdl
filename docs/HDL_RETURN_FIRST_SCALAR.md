@@ -17,7 +17,7 @@ pub u8 • add(u8 a,u8 b) { return a+b; }
 
 The arrow/bullet must be contiguous as a single source token; whitespace
 around it is allowed. Type widths are validated using the existing HDL
-`HDL_WIDTH` gate. The return-first form must not specify a redundant trailing
+`HDL_WIDTH` gate. The return-first form also admits `begin return ...; end` and the bare `return ...; end` block, while preserving the same frozen AST. It must not specify a redundant trailing
 `: type`. No implicit casts, Error/Result handling, actor scheduling,
 asynchronous suspension, or target-specific codegen bypass is introduced.
 The previously implemented bang exceptional-control rejection is preserved.

@@ -96,7 +96,12 @@ export function parseHardwareSource(source) {
       take();
     }while(true);
   }
-  expect(')');if(returnWidth===null){expect(':');returnWidth=width();}expect('{');expect('return');
+  expect(')');if(returnWidth===null){expect(':');returnWidth=width();}
+  const braced=peek().value==='{';
+  if(braced)take();
+  else if(returnFirst&&peek().value==='begin')take();
+  else if(!returnFirst)expect('{');
+  expect('return');
   const symbols=new Map(params.map(p=>[p.name,p.width]));
   function primary(depth){
     if(depth>MAX_DEPTH)fail('HDL_DEPTH',peek(),'expression nesting limit');
@@ -120,7 +125,7 @@ export function parseHardwareSource(source) {
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
-  const expr=expression();expect(';');expect('}');expect('<eof>');
+  const expr=expression();expect(';');expect(braced?'}':'end');expect('<eof>');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   return admitProgram({name,params,returnWidth,expression:expr});

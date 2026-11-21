@@ -11,6 +11,9 @@ const positive=[
   'u8 • add(u8 a,u8 b){return a+b;}',
   'pub fnc u8 • add(u8 a,u8 b){return a+b;}',
   'u8•add(u8 a,u8 b){return a+b;}',
+  'pub fnc u8 <- add(u8 a,u8 b) begin return a+b; end',
+  'u8 <- add(u8 a,u8 b) return a+b; end',
+  'fnc u8 • add(u8 a,u8 b) return a+b; end',
 ];
 const original=parseHardwareSource(legacy);
 const rtl=emitSystemVerilog(original);
