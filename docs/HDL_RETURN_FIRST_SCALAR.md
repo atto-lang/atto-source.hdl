@@ -29,3 +29,14 @@ attested separately on the exact commit before broader backend parity claims.
 
 This branch is stacked on the existing HDL exceptional-keyword PR #21 to
 avoid competing lexer edits; merge/review the parent dependency first.
+
+## Proven width inference (no implicit conversions)
+
+Within this **bounded unsigned hardware profile only**, a return-first header
+may also use `infer <- add(u8 a,u8 b)` or `infer • add(...)`. The compiler
+first validates the normal expression AST and its operand widths, then sets
+the exact output port width to the expression's proven width. The generated
+SystemVerilog is byte-for-byte identical to an explicitly annotated function
+with the same parameters. Mixed widths, missing inputs, unsupported operators,
+trap effects, and hidden conversions still fail closed. This is not equivalent
+to full dynamic or class/generic `infer` support on software backends.

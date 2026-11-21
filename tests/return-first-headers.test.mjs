@@ -45,6 +45,37 @@ test('invalid arrows, widths and mixed width expressions fail before emitting RT
       e instanceof HardwareSourceError && e.code===code,source);
   }
 });
+test('bounded return-first infer proves the exact unsigned width and same emitted RTL',()=>{
+  const reference=parseHardwareSource('pub fnc add(u8 a,u8 b): u8 {return a+b;}');
+  const original=emitSystemVerilog(reference);
+  for(const source of [
+    'fnc infer <- add(u8 a,u8 b){return a+b;}',
+    'infer • add(u8 a,u8 b){return a+b;}',
+    'infer <- add(u8 a,u8 b) begin return a+b; end',
+    'pub infer <- add(u8 a,u8 b) return a+b; end',
+    'pub fnc infer • add(u8 a,u8 b){return a+b;}',
+  ]){
+    const actual=parseHardwareSource(source);
+    assert.equal(actual.returnWidth,8,source);
+    assert.deepEqual({...actual},{...reference},source);
+    assert.equal(emitSystemVerilog(actual),original,source);
+    assert.equal(evaluateReference(actual,{a:12n,b:31n}),43n,source);
+  }
+});
+test('return-first infer rejects unbound, ambiguous and unsupported expressions',()=>{
+  const negatives=[
+    ['infer <- add(u8 a,u16 b){return a+b;}','HDL_MISMATCH'],
+    ['infer <- add(u8 a,u8 b){return not_bound;}','HDL_UNBOUND'],
+    ['infer <- add(){return a;}','HDL_UNBOUND'],
+    ['infer <- add(u65 a,u65 b){return a+b;}','HDL_WIDTH'],
+    ['infer <- add(u8 a,u8 b):u8{return a+b;}','HDL_SYNTAX'],
+    ['infer <- add(u8 a,u8 b){return trap! a;}','HDL_EXCEPTION_BANG_UNSUPPORTED'],
+  ];
+  for(const [source,code] of negatives)
+    assert.throws(()=>parseHardwareSource(source),
+      e=>e instanceof HardwareSourceError&&e.code===code,source);
+});
+
 test('legacy syntax and existing bang-effect rejection are not weakened',()=>{
   assert.equal(evaluateReference(original,{a:12n,b:31n}),43n);
   const withComment=parseHardwareSource(

@@ -77,12 +77,18 @@ export function parseHardwareSource(source) {
   // The limited u1..u64 forms reuse the exact same admission and RTL AST.
   const hasFnc=peek().value==='fnc';
   if(hasFnc)take();
-  const returnFirst=/^u(?:[1-9][0-9]*)$/.test(peek().value) &&
-    (ts[i+1]?.value==='<-' || ts[i+1]?.value==='•');
+  const hasReturnMarker=ts[i+1]?.value==='<-' || ts[i+1]?.value==='•';
+  const inferredReturn=hasReturnMarker && peek().value==='infer';
+  const returnFirst=hasReturnMarker &&
+    (inferredReturn || /^u(?:[1-9][0-9]*)$/.test(peek().value));
   if(!hasFnc && !returnFirst)
     fail('HDL_SYNTAX',peek(),'expected fnc or return-first typed header');
   let name,returnWidth=null;
-  if(returnFirst){returnWidth=width();take();name=ident();}
+  if(returnFirst){
+    if(inferredReturn)take(); // contextual infer is proven by the returned AST
+    else returnWidth=width();
+    take();name=ident(); // consume one contiguous <- or bullet separator
+  }
   else name=ident();
   expect('(');
   const params=[];
@@ -96,7 +102,7 @@ export function parseHardwareSource(source) {
       take();
     }while(true);
   }
-  expect(')');if(returnWidth===null){expect(':');returnWidth=width();}
+  expect(')');if(returnWidth===null&&!inferredReturn){expect(':');returnWidth=width();}
   const braced=peek().value==='{';
   if(braced)take();
   else if(returnFirst&&peek().value==='begin')take();
@@ -126,6 +132,7 @@ export function parseHardwareSource(source) {
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
   const expr=expression();expect(';');expect(braced?'}':'end');expect('<eof>');
+  if(inferredReturn) returnWidth=expr.width; // only after bounded width and operand checks
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   return admitProgram({name,params,returnWidth,expression:expr});
