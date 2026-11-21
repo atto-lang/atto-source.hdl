@@ -41,7 +41,7 @@ test('actor-owned heap and object allocation fail closed before RTL generation',
       source);
   }
   // No SystemVerilog output may be produced for the canonical actor graph.
-  const graph='define class Node as int value Node? next end\\ndefine actor HeapGraphProbe as receive(int m) { let first = new Node(42, none) assert(first.next?.value == 42) } end';
+  const graph='define class Node as int value Node? next end\ndefine actor HeapGraphProbe as receive(int m) { let first = new Node(42, none) assert(first.next?.value == 42) } end';
   assert.throws(()=>compileSource(graph),HardwareSourceError);
   // Comments never introduce active source authority.
   assert.doesNotThrow(()=>compileSource(
