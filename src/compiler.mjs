@@ -32,11 +32,11 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|<-|•|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|•|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // HDL has no typed guest exceptional-control path; do not mistake
     // trap!/throw!/raise!/panic! for synthesizable scalar names.
     if(['trap','throw','raise','panic'].includes(value) &&
@@ -73,7 +73,18 @@ export function parseHardwareSource(source) {
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
   const width=()=>{const t=take(),m=/^u([1-9][0-9]*)$/.exec(t.value);if(!m||Number(m[1])>64)fail('HDL_WIDTH',t,'only unsigned u1..u64 are supported');return Number(m[1]);};
   if(peek().value==='pub')take();
-  expect('fnc'); const name=ident();expect('(');
+  // Return-first type headers must not introduce a new executable language.
+  // The limited u1..u64 forms reuse the exact same admission and RTL AST.
+  const hasFnc=peek().value==='fnc';
+  if(hasFnc)take();
+  const returnFirst=/^u(?:[1-9][0-9]*)$/.test(peek().value) &&
+    (ts[i+1]?.value==='<-' || ts[i+1]?.value==='•');
+  if(!hasFnc && !returnFirst)
+    fail('HDL_SYNTAX',peek(),'expected fnc or return-first typed header');
+  let name,returnWidth=null;
+  if(returnFirst){returnWidth=width();take();name=ident();}
+  else name=ident();
+  expect('(');
   const params=[];
   if(peek().value!==')'){
     do{
@@ -85,7 +96,7 @@ export function parseHardwareSource(source) {
       take();
     }while(true);
   }
-  expect(')');expect(':');const returnWidth=width();expect('{');expect('return');
+  expect(')');if(returnWidth===null){expect(':');returnWidth=width();}expect('{');expect('return');
   const symbols=new Map(params.map(p=>[p.name,p.width]));
   function primary(depth){
     if(depth>MAX_DEPTH)fail('HDL_DEPTH',peek(),'expression nesting limit');
