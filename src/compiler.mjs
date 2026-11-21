@@ -32,7 +32,7 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^.!?<> =]|./gy;
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
@@ -45,7 +45,11 @@ export function lex(source) {
     if(value==='<'&&['ActorMail','ActorGroup','Topic','Subscription'].includes(tokens.at(-1)?.value))
       fail('HDL_ACTOR_UNSUPPORTED',{offset:tokens.at(-1).offset},
         'Atto Theater typed actor/group/topic source needs a runtime; no RTL lowering');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    // Quoted text is one opaque token; no source literals or new punctuation
+    // are ever admitted to the combinational RTL AST by the strict parser.
+    const quoted=/^"(?:\\.|[^"\\])*"$|^'(?:\\.|[^'\\])*'$/.test(value);
+    if(!quoted && !/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^.!?<>=])$/.test(value))
+      fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
@@ -70,6 +74,9 @@ function rejectExecutionDomains(ts) {
     // hardware operations. Reject an explicit actor/supervisor declaration or
     // actor lifecycle operation before accepting any RTL AST. Do not reserve
     // unrelated identifiers such as `topic_count` or `supervisor_id`.
+    if(t.value==='.' && ts[k+1]?.value==='try_publish')
+      fail('HDL_ACTOR_UNSUPPORTED',t,
+        'Atto Ensemble Topic.try_publish requires typed, authorized actor runtime lowering');
     if ((t.value==='define' && (ts[k+1]?.value==='actor' || ts[k+1]?.value==='supervisor')) ||
         t.value==='spawn' ||
         (t.value==='receive' && ts[k+1]?.value==='(') ||
