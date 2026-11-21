@@ -32,11 +32,11 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|<-|•|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;.:{}~&|^]|./gy;
+  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|<-|->|•|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;.:{}~&|^]|./gy;
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|•|[()+\-,;.:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|[()+\-,;.:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // HDL has no typed guest exceptional-control path; do not mistake
     // trap!/throw!/raise!/panic! for synthesizable scalar names.
     if(['trap','throw','raise','panic'].includes(value) &&
@@ -78,7 +78,7 @@ export function parseHardwareSource(source) {
   const hasFnc=peek().value==='fnc';
   if(hasFnc)take();
   const hasReturnMarker=ts[i+1]?.value==='<-' || ts[i+1]?.value==='•';
-  const inferredReturn=hasReturnMarker && peek().value==='infer';
+  let inferredReturn=hasReturnMarker && peek().value==='infer';
   const returnFirst=hasReturnMarker &&
     (inferredReturn || /^u(?:[1-9][0-9]*)$/.test(peek().value));
   if(!hasFnc && !returnFirst)
@@ -102,7 +102,16 @@ export function parseHardwareSource(source) {
       take();
     }while(true);
   }
-  expect(')');if(returnWidth===null&&!inferredReturn){expect(':');returnWidth=width();}
+  expect(')');
+  if(!returnFirst){
+    // Name-first `fnc add(...) -> u8` and `fnc add(...): u8 ->`
+    // share the same immutable AST and bounded width inference.
+    const leadingArrow=peek().value==='->';
+    if(leadingArrow)take();else expect(':');
+    if(peek().value==='infer'){take();inferredReturn=true;}
+    else returnWidth=width();
+    if(!leadingArrow && peek().value==='->')take();
+  }
   const braced=peek().value==='{';
   if(braced)take();
   else if(returnFirst&&peek().value==='begin')take();
