@@ -36,6 +36,15 @@ export function lex(source) {
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
+    // Recognize Theater syntax early: a later '<' in a typed ActorMail
+    // must not hide the more precise runtime-unsupported diagnostic.
+    // Comments have already been removed by this lexer.
+    if((value==='actor'||value==='supervisor')&&tokens.at(-1)?.value==='define')
+      fail('HDL_ACTOR_UNSUPPORTED',{offset:tokens.at(-1).offset},
+        'Atto Theater actor/supervisor definitions need a runtime; no RTL lowering');
+    if(value==='<'&&['ActorMail','ActorGroup','Topic','Subscription'].includes(tokens.at(-1)?.value))
+      fail('HDL_ACTOR_UNSUPPORTED',{offset:tokens.at(-1).offset},
+        'Atto Theater typed actor/group/topic source needs a runtime; no RTL lowering');
     if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
