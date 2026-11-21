@@ -32,11 +32,11 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|<-|•|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|<-|•|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;.:{}~&|^]|./gy;
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|•|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|•|[()+\-,;.:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // HDL has no typed guest exceptional-control path; do not mistake
     // trap!/throw!/raise!/panic! for synthesizable scalar names.
     if(['trap','throw','raise','panic'].includes(value) &&
@@ -131,7 +131,11 @@ export function parseHardwareSource(source) {
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
-  const expr=expression();expect(';');expect(braced?'}':'end');expect('<eof>');
+  const expr=expression();expect(';');expect(braced?'}':'end');
+  // Native LLVM/.NET admit `end;` and `end.` for unbraced return-first
+  // callables. Consume at most one terminal marker; braces remain strict.
+  if(!braced && (peek().value===';' || peek().value==='.'))take();
+  expect('<eof>');
   if(inferredReturn) returnWidth=expr.width; // only after bounded width and operand checks
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
