@@ -15,3 +15,7 @@ Canonical `use namespace types;` file header plus public top-level functions; no
 ## Compiler-backed core/types admission gate
 
 An additional exact-head Actions job now invokes the **real hdl compiler** directly on the unchanged backend-owned `core/types.atto`. It fails closed when namespace, type or multi-function lowering is unsupported; there is no source-only/fake-guest fallback. This deliberately exposes incomplete parity rather than reporting passing guest semantics. RTL source generation only. Hardware simulation, signed-width equivalence, synthesis and 8 negative guests require separate evidence. No claim of compiler guest success is made without executed runner steps and independently verified output. Keep the PR draft until semantic positive/negative checks and target-appropriate runtime execution are proven.
+
+## HDL source namespace metadata admission
+
+The restricted combinational SystemVerilog compiler now permits a single `use namespace types;` header before the one currently supported unsigned function, and explicitly rejects duplicates/late headers using `HDL_NAMESPACE_DUPLICATE` or `HDL_NAMESPACE_HEADER_ORDER`. Three `.atto` compiler fixtures exercise positive HDL emission plus both negative outcomes through the real CLI. Namespace metadata is not a Verilog package or external import. The unchanged full signed-i64 `core/types.atto` is still a deliberately failing gate pending exact signed-width, bool and multi-function RTL semantics; simulation/synthesis/AOT status remains `NOT_EXECUTED` without real tools and stepful jobs.

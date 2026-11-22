@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'core/types.atto'
+      - 'src/compiler.mjs'
       - 'tests/core-types-source.test.mjs'
       - 'tests/core-types-matrix-source.test.mjs'
       - 'tests/fixtures/core-types-v1/**'
@@ -59,6 +60,23 @@ jobs:
       - name: Compile unchanged core/types to real SystemVerilog RTL
         run: |
           set -euo pipefail
+          node bin/oreslang-hdl.mjs tests/fixtures/core-types-v1/hdl-namespace-positive.atto "$RUNNER_TEMP/types-fragment.sv"
+          test -s "$RUNNER_TEMP/types-fragment.sv"
+          grep -Fq 'module ores_passthrough' "$RUNNER_TEMP/types-fragment.sv"
+          for case in hdl-namespace-duplicate-negative hdl-namespace-late-negative; do
+            if node bin/oreslang-hdl.mjs "tests/fixtures/core-types-v1/$case.atto" "$RUNNER_TEMP/rejected-$case.sv" >"$RUNNER_TEMP/$case.stdout" 2>"$RUNNER_TEMP/$case.stderr"; then
+              echo "$case unexpectedly lowered to RTL" >&2
+              exit 1
+            fi
+            test ! -f "$RUNNER_TEMP/rejected-$case.sv"
+            case "$case" in
+              *duplicate*) grep -Fq HDL_NAMESPACE_DUPLICATE "$RUNNER_TEMP/$case.stderr";;
+              *late*) grep -Fq HDL_NAMESPACE_HEADER_ORDER "$RUNNER_TEMP/$case.stderr";;
+            esac
+          done
+          echo 'CORE_TYPES_HDL_NAMESPACE_FRAGMENT=EMITTED_RTL'
+          # Full signed-i64 library needs distinct boolean, constant and
+          # signed-width lowering; no simulation parity is inferred here.
           node bin/oreslang-hdl.mjs core/types.atto "$RUNNER_TEMP/core-types.sv"
           test -s "$RUNNER_TEMP/core-types.sv"
           grep -Eq '^module[[:space:]]' "$RUNNER_TEMP/core-types.sv"
