@@ -1,0 +1,2 @@
+use namespace types;
+pub fnc passthrough(u8 value):u8 { return value; }

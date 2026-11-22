@@ -64,6 +64,16 @@ export function parseHardwareSource(source) {
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
   const width=()=>{const t=take(),m=/^u([1-9][0-9]*)$/.exec(t.value);if(!m||Number(m[1])>64)fail('HDL_WIDTH',t,'only unsigned u1..u64 are supported');return Number(m[1]);};
+  // File-level Atto namespace metadata never becomes a Verilog package,
+  // unchecked import, or synthetic hardware module.
+  let hasNamespace=false;
+  if(peek().value==='use'){
+    take();expect('namespace');ident();expect(';');
+    hasNamespace=true;
+  }
+  if(peek().value==='use'||peek().value==='namespace')
+    fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
+      peek(),'namespace header must occur once before all declarations');
   if(peek().value==='pub')take();
   expect('fnc'); const name=ident();expect('(');
   const params=[];
@@ -101,7 +111,11 @@ export function parseHardwareSource(source) {
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
-  const expr=expression();expect(';');expect('}');expect('<eof>');
+  const expr=expression();expect(';');expect('}');
+  if(peek().value==='use'||peek().value==='namespace')
+    fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
+      peek(),'late or duplicate namespace header');
+  expect('<eof>');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   return admitProgram({name,params,returnWidth,expression:expr});
