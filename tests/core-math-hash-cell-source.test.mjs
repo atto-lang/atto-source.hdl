@@ -9,7 +9,7 @@ const PIN={
   "cell": "4dd71711deaeac3ebab698800c3f5365b748b254"
 };
 const gitBlob=bytes=>createHash('sha1')
- .update(Buffer.from('blob '+bytes.length+'\\0')).update(bytes).digest('hex');
+ .update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
 test('Atto HDL core source files are backend-owned but not synthesized',async()=>{
  for(const [name,expected] of Object.entries(PIN)){
   const file=new URL('../library/atto.core/'+name+'.atto',import.meta.url);
@@ -19,7 +19,7 @@ test('Atto HDL core source files are backend-owned but not synthesized',async()=
   assert.equal(gitBlob(bytes),expected);
   const code=new TextDecoder('utf8',{fatal:true}).decode(bytes);
   assert.match(code,new RegExp('define module '+name+' as'));
-  assert.ok(!code.includes('\\0')&&!code.startsWith('\\uFEFF'));
+  assert.ok(!code.includes('\0')&&!code.startsWith('\uFEFF'));
  }
 });
 test('RTL compiler fails closed rather than treating Core import as hardware',()=>{
