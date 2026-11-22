@@ -50,8 +50,8 @@ Until independently executed, all HDL feature statuses remain
   actor/task/await boundaries, exception/cancel cleanup and no generated
   guest artifact for rejected source. A helper returning `true` never
   authorizes bypassing those checks.
-- Histogram snapshot construction now validates the bucket inventory,
-  copies caller-owned arrays and keeps the constructor module-private.
-  This prevents mutable aliases at the stdlib boundary independent of
-  whether an implicit-borrow migration profile is available.
+- HDL does **not** stage the heap-backed HistogramSnapshot class.
+  Defensive snapshot copying is implemented only in the eight software
+  backends; HDL must reject or classify that capability unsupported after
+  actual compiler target-profile verification.
 - The backend stages this core source and borrow fixtures; namespace resolution, typed compiler borrow diagnostics and guest execution remain pending.
