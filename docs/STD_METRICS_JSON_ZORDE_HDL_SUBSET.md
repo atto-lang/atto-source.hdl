@@ -34,3 +34,24 @@ compiler, Verilog/VHDL output or RTL simulator. Future work:
 
 Until independently executed, all HDL feature statuses remain
 `NOT_EXECUTED` or `CAPABILITY_REVIEW_REQUIRED`, never `PASS`.
+
+
+## Core loan-safety preflight and compiler borrow boundary
+
+- `core/borrow_admission.atto` is a bounded unique-owner loan-state
+  **diagnostic/runtime preflight** with a 65,535-reader quota, not the
+  compiler borrow checker and not an owner/borrow capability.
+- `contracts/core-borrow-preflight-v1.json` pins 13 scalar truth-table
+  states; `tests/core-borrow-preflight-source.test.mjs` checks the source
+  preflight and explicitly forbids source-only borrow PASS.
+- HDL retains only pure scalar policy; dynamic owner provenance, actor domains and NLL remain unverified target capabilities.
+- The compiler remains responsible for readonly/exclusive provenance,
+  last-use/CFG lifetime, no move under a live loan, nonescaping return,
+  actor/task/await boundaries, exception/cancel cleanup and no generated
+  guest artifact for rejected source. A helper returning `true` never
+  authorizes bypassing those checks.
+- Histogram snapshot construction now validates the bucket inventory,
+  copies caller-owned arrays and keeps the constructor module-private.
+  This prevents mutable aliases at the stdlib boundary independent of
+  whether an implicit-borrow migration profile is available.
+- The backend stages this core source and borrow fixtures; namespace resolution, typed compiler borrow diagnostics and guest execution remain pending.
