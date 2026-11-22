@@ -1,0 +1,27 @@
+// HDL compiler-owned static performance counters. No implicit CPU clock,
+// heap allocation, wall-clock timers, network export, or runtime JIT.
+// Values are hardware cycle snapshots provided by an explicit clock domain;
+// nanosecond conversion is unavailable without a proven clock frequency.
+define module Perf as
+  pub fnc begin_cycles(bool enabled, int current_cycle) -> int {
+    if !enabled || current_cycle < 0; do
+      return 0;
+    fi
+    return current_cycle;
+  }
+
+  pub fnc duration_cycles(bool enabled, int begin_cycle, int end_cycle) -> int {
+    if !enabled || begin_cycle < 0 || end_cycle < begin_cycle; do
+      return 0;
+    fi
+    return end_cycle - begin_cycle;
+  }
+
+  // Must be synthesized as static modulo/divisor logic if used on target.
+  pub fnc should_sample(int sample_key, int every_n) -> bool {
+    if sample_key < 0 || every_n < 1 || every_n > 65536; do
+      return false;
+    fi
+    return (sample_key % every_n) == 0;
+  }
+end
