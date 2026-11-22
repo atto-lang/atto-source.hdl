@@ -6,7 +6,7 @@ import {compileSource} from "../src/compiler.mjs";
 const PIN={
   "math": "45598b642a455907152d2eceaf9a71dc35a9016f",
   "hash": "9ab1e38142b43d5af2aa6542baaf995f95af30af",
-  "cell": "4dd71711deaeac3ebab698800c3f5365b748b254"
+  "cell": "54f75dcb27fe9754a44349889d281ed52026301b"
 };
 const gitBlob=bytes=>createHash('sha1')
  .update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
