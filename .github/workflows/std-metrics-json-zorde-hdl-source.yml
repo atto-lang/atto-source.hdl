@@ -7,6 +7,9 @@ on:
       - 'contracts/std-metrics-json-zorde-hdl-subset-v1.json'
       - 'tests/std-metrics-json-zorde-hdl-source.test.mjs'
       - '.github/workflows/std-metrics-json-zorde-hdl-source.yml'
+      - 'contracts/core-borrow-preflight-v1.json'
+      - 'tests/core-borrow-preflight-source.test.mjs'
+      - 'stdlib/core/borrow_admission.atto'
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,6 +34,7 @@ jobs:
           echo "HDL_SOURCE_HEAD=$EXPECTED_HEAD"
           echo "HDL_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')"
           node --test tests/std-metrics-json-zorde-hdl-source.test.mjs
+          node --test tests/core-borrow-preflight-source.test.mjs
           echo 'HDL_SCALAR_SOURCE_REFERENCE=EXECUTED'
           echo 'HDL_RTL_SIMULATION=NOT_EXECUTED'
       - name: Record evidence limits
