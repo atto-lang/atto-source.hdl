@@ -20,3 +20,22 @@ reset/unknown-bit handling, checked overflow behavior, provide positive and
 negative compiler guest outputs, synthesize and simulate against an RTL
 testbench, verify area/latency and exact-head stepful CI. Generic closures,
 transposes, allocations, throw/raise and scheduler effects remain unsupported.
+
+## Borrow and affine capability classification (source-only)
+
+HDL's proposed `Option<int>` / `Result<int,int>` are **Copy scalar
+tag+payload contracts**, not source-level `borrow Option<Payload>`
+or generic affine storage. Consequently this branch MUST NOT claim
+borrow-safe Option/Result generics, destructor-once behavior, or
+`borrow!` / `take!` compilation. That capability is explicitly
+**NOT_VERIFIED** and should fail closed until a typed ownership MIR
+to RTL mapping is independently established.
+
+Before admitting read-only tag queries as an actual hardware feature,
+synthesize a tagged-sum guest and verify inactive-variant masking,
+defined reset semantics, and owner-safe combinational observations
+in a real RTL simulation/synthesis run. A generic class/borrow parse
+error alone is not a semantic ownership-checker proof. Real synthesis
+and hardware simulator receipts, rather than Node source-contract checks,
+are required. The all-eleven conformance matrix intentionally preserves
+HDL's individual `not_executed` cells.
