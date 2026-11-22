@@ -6,7 +6,7 @@ import {compileSource} from "../src/compiler.mjs";
 const PIN={
   "math": "45598b642a455907152d2eceaf9a71dc35a9016f",
   "hash": "9ab1e38142b43d5af2aa6542baaf995f95af30af",
-  "cell": "54f75dcb27fe9754a44349889d281ed52026301b"
+  "cell": "38439b2b0b487b4bb09d191ba50c115611295206"
 };
 const gitBlob=bytes=>createHash('sha1')
  .update(Buffer.from('blob '+bytes.length+'\0')).update(bytes).digest('hex');
@@ -57,4 +57,22 @@ test('borrow-aware core Cell owner predicates are source-only, never guest autho
   }
   assert.ok(!cell.includes('pub fnc issue_loan('));
   // This is only a source/policy reference check, NOT a compiled guest test.
+});
+
+test('core/cell saturated read admission rejects overflow but retains owner read', async () => {
+  const source=(await readFile(new URL('../library/atto.core/cell.atto',import.meta.url))).toString('utf8');
+  // Source-only policy shape. This MUST NOT be promoted to a compiler loan.
+  assert.match(source,/pub fnc can_borrow_read\(/);
+  assert.match(source,/pub fnc can_owner_read\(/);
+  assert.match(source,/readers >= 0 && readers < 65535 && !writer_active/);
+  const canAcquire=(n,w)=>n>=0 && n<65535 && !w;
+  const ownerRead=(n,w)=>n>=0 && n<=65535 && !w;
+  for(const [n,w,acquire,read] of [
+    [0,false,true,true],[65534,false,true,true],[65535,false,false,true],
+    [65536,false,false,false],[-1,false,false,false],[0,true,false,false]
+  ]) {
+    assert.equal(canAcquire(n,w),acquire);
+    assert.equal(ownerRead(n,w),read);
+  }
+  assert.ok(!source.includes('pub fnc issue_loan('));
 });
