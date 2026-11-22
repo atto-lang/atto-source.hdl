@@ -11,3 +11,7 @@ Guest acceptance target: link `tests/fixtures/core-types-v1/edge-positive.atto` 
 ## Namespace-only core source
 
 Canonical `use namespace types;` file header plus public top-level functions; no `define module` wrapper. Consumers still explicitly import the symbols. Compiler parse, namespace source identity, static imports, and executed linked guests require separate proofs. Until the current PR compiles and runs, namespace guest parity remains NOT_EXECUTED.
+
+## Compiler-backed core/types admission gate
+
+An additional exact-head Actions job now invokes the **real hdl compiler** directly on the unchanged backend-owned `core/types.atto`. It fails closed when namespace, type or multi-function lowering is unsupported; there is no source-only/fake-guest fallback. This deliberately exposes incomplete parity rather than reporting passing guest semantics. RTL source generation only. Hardware simulation, signed-width equivalence, synthesis and 8 negative guests require separate evidence. No claim of compiler guest success is made without executed runner steps and independently verified output. Keep the PR draft until semantic positive/negative checks and target-appropriate runtime execution are proven.

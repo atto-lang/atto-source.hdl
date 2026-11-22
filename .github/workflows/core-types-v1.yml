@@ -38,3 +38,31 @@ jobs:
       - name: Preserve evidence boundary
         if: always()
         run: echo 'This workflow runs a strict source-model oracle only; it neither compiles Atto nor proves NativeAOT/Wasm/JIT guest execution.' >> "$GITHUB_STEP_SUMMARY"
+  core-types-native-compiler-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact head before native compiler execution
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git rev-parse 'HEAD^{tree}'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Compile unchanged core/types to real SystemVerilog RTL
+        run: |
+          set -euo pipefail
+          node bin/oreslang-hdl.mjs core/types.atto "$RUNNER_TEMP/core-types.sv"
+          test -s "$RUNNER_TEMP/core-types.sv"
+          grep -Eq '^module[[:space:]]' "$RUNNER_TEMP/core-types.sv"
+          echo 'CORE_TYPES_HDL_RTL_GENERATED=YES'
+      - name: Evidence limitations
+        if: always()
+        run: echo 'RTL source generation only. Hardware simulation, signed-width equivalence, synthesis and 8 negative guests require separate evidence. Zero actual runner steps means NOT_EXECUTED.' >> "$GITHUB_STEP_SUMMARY"
