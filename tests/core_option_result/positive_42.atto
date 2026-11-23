@@ -1,0 +1,11 @@
+// Hardware compiler target candidate only: expected return 42 if admitted.
+fnc optional(bool yes, int value): Option<int> {
+  if yes; do return Some(value); fi
+  return None;
+}
+pub fnc main(): int {
+  return match optional(true, 42) over
+    on Some(value) -> value,
+    on None -> 0,
+  end;
+}
