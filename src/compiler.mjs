@@ -118,8 +118,24 @@ function rejectExecutionDomains(ts) {
       fail('HDL_EXECUTION_DOMAIN',t,'execution task requires scheduler-aware Future lowering; not lowered to RTL');
   }
 }
+// Source-level singleton identity and guarded mutable shared regions cannot
+// be synthesized as per-module combinational RTL without changing semantics.
+// Reject declaration-context uses before even attempting hardware lowering.
+function rejectSingletonDeclarations(tokens) {
+  for(let i=0;i<tokens.length;i++) {
+    let at=i;
+    if(tokens[at]?.value==='pub'&&tokens[at+1]?.value==='define')at++;
+    if(tokens[at]?.value!=='define')continue;
+    at++;
+    if(tokens[at]?.value==='pub')at++;
+    if(tokens[at]?.value==='singleton')
+      fail('HDL_SINGLETON_UNSUPPORTED',tokens[at],
+        'ORES-SINGLETON-UNSUPPORTED: application-domain identity, exactly-once publication and fair unique-owner RW memory cannot be emitted as combinational RTL');
+  }
+}
 export function parseHardwareSource(source) {
   const ts=lex(source); let i=0;
+  rejectSingletonDeclarations(ts);
   rejectExecutionDomains(ts);
   const peek=()=>ts[i],take=()=>ts[i++];
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
