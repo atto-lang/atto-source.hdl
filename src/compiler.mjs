@@ -89,8 +89,22 @@ function rejectUnloweredTopicPublish(source) {
 
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
-  const controlOffset=source.search(/[\x1b\x7f]/);
-  if(controlOffset>=0) fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
+  // Reject Trojan Source reordering controls even in comments/ignored text.
+  // U+200E/200F and U+061C are directional marks; U+202A..202E and
+  // U+2066..2069 control embedding, overrides and isolates.
+  const bidiOffset = source.search(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u);
+  if(bidiOffset>=0)
+    fail('HDL_BIDI_CONTROL',{offset:bidiOffset},'bidirectional Unicode formatting control in source');
+  // Unicode NEL/LS/PS can disguise line/comment boundaries in source views.
+  // Reject before lexer whitespace and comment recognition.
+  const lineControlOffset = source.search(/[\u0085\u2028\u2029]/u);
+  if(lineControlOffset>=0)
+    fail('HDL_SOURCE_LINE_CONTROL',{offset:lineControlOffset},'Unicode line separator in source');
+  // Source text admitted by the scalar JS frontend must not be allowed to
+  // disguise terminal ESC/DEL inside lexically ignored HDL comments.
+  const controlOffset = source.search(/[\x1b\x7f]/);
+  if(controlOffset>=0)
+    fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   rejectUnloweredTopicPublish(source);
   const tokens=[];
   const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
