@@ -89,6 +89,8 @@ function rejectUnloweredTopicPublish(source) {
 
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
+  const controlOffset=source.search(/[\x1b\x7f]/);
+  if(controlOffset>=0) fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   rejectUnloweredTopicPublish(source);
   const tokens=[];
   const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
