@@ -93,3 +93,40 @@ test('long arithmetic chains are rejected before RTL emission',()=>{
   assert.throws(()=>compileSource('fnc f(u8 a): u8 { return '+chain+'; }'),
     e=>e instanceof HardwareSourceError && e.code==='HDL_EXPR_LIMIT');
 });
+
+
+test('canonical typed Topic.try_publish alias fails before any HDL RTL artifact',()=>{
+  const canonical=readFileSync(new URL('./fixtures/canonical-unlowered-try-publish.atto',import.meta.url),'utf8');
+  const reject=e=>e instanceof HardwareSourceError &&
+    e.code==='HDL_ACTOR_PUBSUB_UNSUPPORTED' &&
+    e.message.includes('Topic.try_publish');
+  for(const source of [
+    canonical,
+    'fnc f(u8 a):u8 {return alias.try_publish(share! event);}',
+    'fnc f(u8 a):u8 {return alias /* outer /* nested */ end */ . try_publish(share! event);}',
+    'fnc f(u8 a):u8 {return alias?.try_publish(share! event);}',
+    'fnc f(u8 a):u8 {return alias.try_publish;}',
+    '// ignored alias.try_publish(1)?\nfnc f(u8 a):u8 {return other.try_publish(1);}'
+  ]) {
+    assert.throws(()=>parseHardwareSource(source),reject,source);
+    assert.throws(()=>compileSource(source),reject,source);
+  }
+});
+
+test('typed Topic pubsub denial ignores inert comments and literals',()=>{
+  // Standalone similarly named callables remain distinct; an irrelevant
+  // comment or string may still be rejected by the scalar RTL grammar,
+  // but must not be falsely labelled typed Topic publication.
+  const allowed='fnc try_publish(u8 value):u8{return value;}';
+  assert.equal(compileSource(allowed).program.name,'try_publish');
+  for(const source of [
+    'fnc f(u8 a):u8{return a;} // alias.try_publish(share! event)?',
+    'fnc f(u8 a):u8{return a;} /* alias.try_publish(share! event) */',
+    'fnc f(u8 a):u8{return a;} /* nested /* alias.try_publish() */ outer */',
+    'fnc f(u8 a):u8{return alias.try_publisher;}',
+    'fnc f(u8 a):u8{return "alias.try_publish(1)";}'
+  ]) {
+    try { compileSource(source); }
+    catch(e) { assert.notEqual(e.code,'HDL_ACTOR_PUBSUB_UNSUPPORTED',source); }
+  }
+});

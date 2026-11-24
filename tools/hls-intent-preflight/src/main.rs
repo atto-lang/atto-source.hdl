@@ -4,7 +4,10 @@ use std::{collections::BTreeMap, env, fs::OpenOptions, io::Read, path::Path};
 use std::os::unix::fs::OpenOptionsExt;
 
 const MAX_BYTES: u64 = 65_536;
-#[cfg(target_os="linux")]
+// Linux arm64 uses a different O_NOFOLLOW value from Linux x86_64.
+#[cfg(all(target_os="linux", target_arch="aarch64"))]
+const NOFOLLOW_NONBLOCK: i32 = 0o100000 | 0o4000;
+#[cfg(all(target_os="linux", not(target_arch="aarch64")))]
 const NOFOLLOW_NONBLOCK: i32 = 0o400000 | 0o4000;
 const KEYS: [&str; 13] = ["schema_version","kernel","trip_count","unroll_factor",
     "word_width","signed","value_min","value_max","target_ii",
