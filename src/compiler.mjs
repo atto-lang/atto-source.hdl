@@ -29,8 +29,67 @@ export class HardwareSourceError extends Error {
   constructor(code,location,detail) { super(code+' at offset '+location+': '+detail); this.name='HardwareSourceError'; this.code=code; this.offset=location; }
 }
 const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);};
+
+/**
+ * Exact member-name admission, not a replacement for typed resolution.
+ * This scalar RTL backend cannot lower Topic<T>, actor capabilities,
+ * ownership transfer or typed Result receipts. Source must fail BEFORE
+ * any RTL artifact is emitted, even if a prior string or unrelated syntax
+ * would otherwise cause a less specific generic parser error.
+ *
+ * Ignore comments/literals so inert examples cannot impersonate a call.
+ * The scan is source-length bounded by lex(), accepts nested block trivia,
+ * and recognizes the canonical U+0085 line-comment terminator.
+ */
+function rejectUnloweredTopicPublish(source) {
+  let previous='';
+  const isStart=c=>c!==undefined&&/[A-Za-z_]/.test(c);
+  const isPart=c=>c!==undefined&&/[A-Za-z0-9_]/.test(c);
+  const lineEnd=c=>c===undefined||c==='\n'||c==='\r'||c==='\u0085'||c==='\u2028'||c==='\u2029';
+  for(let i=0;i<source.length;) {
+    const c=source[i];
+    if(/\s/.test(c)||c==='\u0085'){i++;continue;}
+    if(c==='/'&&source[i+1]==='/'){
+      i+=2;while(i<source.length&&!lineEnd(source[i]))i++;
+      continue;
+    }
+    if(c==='/'&&source[i+1]==='*'){
+      const start=i;i+=2;let depth=1;
+      while(i<source.length&&depth){
+        if(source[i]==='/'&&source[i+1]==='*'){
+          if(++depth>128)fail('HDL_TOKEN',{offset:start},'block comment nesting budget exceeded');
+          i+=2;
+        }else if(source[i]==='*'&&source[i+1]==='/'){depth--;i+=2;}
+        else i++;
+      }
+      if(depth)fail('HDL_TOKEN',{offset:start},'unterminated block comment');
+      continue;
+    }
+    if(c==='"'||c==="'"||c==='`'){
+      const quote=c,start=i++;let closed=false;
+      while(i<source.length){
+        const next=source[i++];
+        if(next==='\\'){if(i<source.length)i++;continue;}
+        if(next===quote){closed=true;break;}
+      }
+      if(!closed)fail('HDL_TOKEN',{offset:start},'unterminated source literal');
+      previous='literal';continue;
+    }
+    if(isStart(c)){
+      const start=i++;
+      while(i<source.length&&isPart(source[i]))i++;
+      if(previous==='.'&&source.slice(start,i)==='try_publish')
+        fail('HDL_ACTOR_PUBSUB_UNSUPPORTED',{offset:start},
+          'Topic.try_publish needs checked actor authority, share! and typed Result receipt lowering; not supported by RTL');
+      previous='id';continue;
+    }
+    previous=c==='.'?'.':'other';i++;
+  }
+}
+
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
+  rejectUnloweredTopicPublish(source);
   const tokens=[];
   const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
   for(const m of source.matchAll(re)) {
