@@ -29,8 +29,69 @@ export class HardwareSourceError extends Error {
   constructor(code,location,detail) { super(code+' at offset '+location+': '+detail); this.name='HardwareSourceError'; this.code=code; this.offset=location; }
 }
 const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);};
+
+/**
+ * Exact member-name admission, not a replacement for typed resolution.
+ * This scalar RTL backend cannot lower Topic<T>, actor capabilities,
+ * ownership transfer or typed Result receipts. Source must fail BEFORE
+ * any RTL artifact is emitted, even if a prior string or unrelated syntax
+ * would otherwise cause a less specific generic parser error.
+ *
+ * Ignore comments/literals so inert examples cannot impersonate a call.
+ * The scan is source-length bounded by lex(), accepts nested block trivia,
+ * and recognizes the canonical U+0085 line-comment terminator.
+ */
+function rejectUnloweredTopicPublish(source) {
+  let previous='';
+  const isStart=c=>c!==undefined&&/[A-Za-z_]/.test(c);
+  const isPart=c=>c!==undefined&&/[A-Za-z0-9_]/.test(c);
+  const lineEnd=c=>c===undefined||c==='\n'||c==='\r'||c==='\u0085'||c==='\u2028'||c==='\u2029';
+  for(let i=0;i<source.length;) {
+    const c=source[i];
+    if(/\s/.test(c)||c==='\u0085'){i++;continue;}
+    if(c==='/'&&source[i+1]==='/'){
+      i+=2;while(i<source.length&&!lineEnd(source[i]))i++;
+      continue;
+    }
+    if(c==='/'&&source[i+1]==='*'){
+      const start=i;i+=2;let depth=1;
+      while(i<source.length&&depth){
+        if(source[i]==='/'&&source[i+1]==='*'){
+          if(++depth>128)fail('HDL_TOKEN',{offset:start},'block comment nesting budget exceeded');
+          i+=2;
+        }else if(source[i]==='*'&&source[i+1]==='/'){depth--;i+=2;}
+        else i++;
+      }
+      if(depth)fail('HDL_TOKEN',{offset:start},'unterminated block comment');
+      continue;
+    }
+    if(c==='"'||c==="'"||c==='`'){
+      const quote=c,start=i++;let closed=false;
+      while(i<source.length){
+        const next=source[i++];
+        if(next==='\\'){if(i<source.length)i++;continue;}
+        if(next===quote){closed=true;break;}
+      }
+      if(!closed)fail('HDL_TOKEN',{offset:start},'unterminated source literal');
+      previous='literal';continue;
+    }
+    if(isStart(c)){
+      const start=i++;
+      while(i<source.length&&isPart(source[i]))i++;
+      if(previous==='.'&&source.slice(start,i)==='try_publish')
+        fail('HDL_ACTOR_PUBSUB_UNSUPPORTED',{offset:start},
+          'Topic.try_publish needs checked actor authority, share! and typed Result receipt lowering; not supported by RTL');
+      previous='id';continue;
+    }
+    previous=c==='.'?'.':'other';i++;
+  }
+}
+
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
+  const controlOffset=source.search(/[\x1b\x7f]/);
+  if(controlOffset>=0) fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
+  rejectUnloweredTopicPublish(source);
   const tokens=[];
   const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
   for(const m of source.matchAll(re)) {
@@ -80,6 +141,16 @@ export function parseHardwareSource(source) {
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
   const width=()=>{const t=take(),m=/^u([1-9][0-9]*)$/.exec(t.value);if(!m||Number(m[1])>64)fail('HDL_WIDTH',t,'only unsigned u1..u64 are supported');return Number(m[1]);};
+  // File-level Atto namespace metadata never becomes a Verilog package,
+  // unchecked import, or synthetic hardware module.
+  let hasNamespace=false;
+  if(peek().value==='use'){
+    take();expect('namespace');ident();expect(';');
+    hasNamespace=true;
+  }
+  if(peek().value==='use'||peek().value==='namespace')
+    fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
+      peek(),'namespace header must occur once before all declarations');
   if(peek().value==='pub')take();
   expect('fnc'); const name=ident();expect('(');
   const params=[];
@@ -117,7 +188,11 @@ export function parseHardwareSource(source) {
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
-  const expr=expression();expect(';');expect('}');expect('<eof>');
+  const expr=expression();expect(';');expect('}');
+  if(peek().value==='use'||peek().value==='namespace')
+    fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
+      peek(),'late or duplicate namespace header');
+  expect('<eof>');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   return admitProgram({name,params,returnWidth,expression:expr});
