@@ -107,7 +107,7 @@ export function lex(source) {
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   rejectUnloweredTopicPublish(source);
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?]|./gy;
   for(const m of source.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
@@ -117,7 +117,7 @@ export function lex(source) {
     // freestanding libraries or emit a partial hardware artifact.
     if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
       'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
@@ -153,10 +153,36 @@ function rejectSingletonDeclarations(tokens) {
         'ORES-SINGLETON-UNSUPPORTED: application-domain identity, exactly-once publication and fair unique-owner RW memory cannot be emitted as combinational RTL');
   }
 }
+
+// A combinational RTL scalar program has no guest object heap, nominal
+// class layout, Ref32 authority, actor incarnation or ownership/borrowing.
+// Reject active guest constructs before emitting any SystemVerilog. Scanning
+// lexed tokens keeps comments inert and does not grant allocation authority.
+function rejectHybridActorMemory(ts) {
+  for(let i=0;i<ts.length;i++) {
+    const t=ts[i];
+    if(t.value==='new' && ts[i+1]?.value!=='<eof>') {
+      fail('HDL_ACTOR_MEMORY_UNSUPPORTED',t,
+        'object construction requires typed actor-local heap and ownership lowering');
+    }
+    if(t.value!=='pub' && t.value!=='define')continue;
+    let p=i;
+    if(ts[p]?.value==='pub')p++;
+    if(ts[p]?.value!=='define')continue;
+    p++;
+    if(ts[p]?.value==='pub')p++;
+    if(ts[p]?.value==='class' || ts[p]?.value==='actor') {
+      fail('HDL_ACTOR_MEMORY_UNSUPPORTED',ts[p],
+        'nominal actor and class declarations require Ref32 and lifecycle lowering; no RTL fallback');
+    }
+  }
+}
+
 export function parseHardwareSource(source) {
   const ts=lex(source); let i=0;
   rejectSingletonDeclarations(ts);
   rejectExecutionDomains(ts);
+  rejectHybridActorMemory(ts);
   const peek=()=>ts[i],take=()=>ts[i++];
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
