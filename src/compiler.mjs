@@ -126,7 +126,7 @@ export function lex(source) {
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   const masked=prepareHardwareSource(source);
   const tokens=[];
-  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?]|./gy;
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}\[\]~&|^?]|./gy;
   for(const m of masked.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)) continue;
@@ -142,7 +142,7 @@ export function lex(source) {
     // freestanding libraries or emit a partial hardware artifact.
     if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
       'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // Canonical exceptional control has no synthesizable typed effect path.
     if(['trap','throw','raise','panic'].includes(value) &&
        source[m.index+value.length]==='!' &&
@@ -233,6 +233,22 @@ export function parseHardwareSource(source) {
   if(peek().value==='use'||peek().value==='namespace')
     fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
       peek(),'namespace header must occur once before all declarations');
+  // Public file exports can surround the single scalar declaration. No package linker.
+  const fileExports=new Set();
+  function fileExport() {
+    const at=expect('export');expect('pub');
+    if(peek().value==='[') {
+      take();expect('pkg');expect(']');
+      fail('HDL_PACKAGE_EXPORT_UNSUPPORTED',at,'RTL module has no package-private linker authority');
+    }
+    if(peek().value==='class')
+      fail('HDL_EXPORT_KIND_UNSUPPORTED',peek(),'HDL cannot lower nominal class types');
+    if(peek().value==='fnc')take();
+    const target=ident();expect(';');
+    if(fileExports.has(target))fail('HDL_EXPORT_DUPLICATE',at,'duplicate export');
+    fileExports.add(target);
+  }
+  while(peek().value==='export')fileExport();
   if(peek().value==='pub')take();
   expect('fnc'); const name=ident();expect('(');
   const params=[];
@@ -271,10 +287,13 @@ export function parseHardwareSource(source) {
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
   const expr=expression();expect(';');expect('}');
+  while(peek().value==='export')fileExport();
   if(peek().value==='use'||peek().value==='namespace')
     fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
       peek(),'late or duplicate namespace header');
   expect('<eof>');
+  if([...fileExports].some(exported=>exported!==name))
+    fail('HDL_EXPORT_UNBOUND',{offset:0},'export target must be the compiled fnc');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   enforceStructuralExpressionDepth(expr);
