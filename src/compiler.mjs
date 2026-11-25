@@ -12,6 +12,17 @@ function sealExpression(expr) {
   if(expr.kind==='binary'){sealExpression(expr.left);sealExpression(expr.right);}
   return Object.freeze(expr);
 }
+// Bound constructed expression trees, not merely parenthesis depth or node count.
+function enforceStructuralExpressionDepth(expr) {
+  const pending=[[expr,1]];
+  while(pending.length) {
+    const [node,depth]=pending.pop();
+    if(depth>MAX_DEPTH)
+      fail('HDL_DEPTH',{offset:0},'constructed expression AST depth limit');
+    if(node.kind==='binary')
+      pending.push([node.left,depth+1],[node.right,depth+1]);
+  }
+}
 function admitProgram(program) {
   for(const p of program.params)Object.freeze(p);
   Object.freeze(program.params);
@@ -241,6 +252,7 @@ export function parseHardwareSource(source) {
   expect('<eof>');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
+  enforceStructuralExpressionDepth(expr);
   return admitProgram({name,params,returnWidth,expression:expr});
 }
 function renderExpr(e){
