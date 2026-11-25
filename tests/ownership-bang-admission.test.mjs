@@ -9,6 +9,12 @@ import {lex,parseHardwareSource,HardwareSourceError} from '../src/compiler.mjs';
 
 const source = expression => 'pub fnc main(u8 item): u8 { return '+expression+'; }';
 
+// Compact spellings fail syntax admission; valid spaced ownership remains
+// explicitly unsupported by the hardware profile.
+const expectedOwnershipDiagnostic = expression => /!!?(?![ \t\r\n\v\f])/.test(expression)
+  && !/!![ \t\r\n\v\f]/.test(expression)
+    ? 'E_BANG_KEYWORD_WHITESPACE' : 'HDL_OWNERSHIP_UNSUPPORTED';
+
 test('HDL never emits RTL for unsupported copy/take/borrow/share', () => {
   for (const expression of [
     'copy!item', 'copy!!item', 'take!item', 'borrow!item', 'borrow! item',
@@ -20,7 +26,7 @@ test('HDL never emits RTL for unsupported copy/take/borrow/share', () => {
     for (const compile of [lex,parseHardwareSource]) {
       assert.throws(() => compile(source(expression)),
         err => err instanceof HardwareSourceError &&
-          err.code === 'HDL_OWNERSHIP_UNSUPPORTED',expression);
+          err.code === expectedOwnershipDiagnostic(expression),expression);
     }
   }
 });
@@ -61,7 +67,7 @@ test('the CLI emits RTL only for supported source', () => {
       const result=spawnSync(process.execPath,[cli,input,output],{encoding:'utf8',timeout:10000});
       assert.ifError(result.error);
       assert.equal(result.status,1,result.stderr);
-      assert.match(result.stderr,/\bHDL_OWNERSHIP_UNSUPPORTED\b/,expression);
+      assert.match(result.stderr,new RegExp('\\b'+expectedOwnershipDiagnostic(expression)+'\\b'),expression);
       assert.equal(existsSync(output),false,expression);
     }
     writeFileSync(input,source('/* outer /* borrow! mut item */ copy!!item */ item'));
