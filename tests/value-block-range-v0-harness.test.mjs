@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdtempSync,rmSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -91,4 +91,29 @@ test('synthetic compiler must not certify missing range witnesses',()=>{
     assert.equal(report.observations.find(x=>x.id==='range_chaining').phase,'parser-reject');
     assert.equal(report.observations.find(x=>x.id==='non_bool_ternary').phase,'typechecker-reject');
   }finally{rmSync(dir,{recursive:true,force:true})}
+});
+
+test('suite rejects path traversal and duplicate ids before any compiler command',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'atto-vbr-malformed-'));
+  try{
+    const scriptDir=join(dir,'scripts');
+    const suiteDir=join(dir,'contracts','value-block-range-v0');
+    mkdirSync(scriptDir,{recursive:true});
+    mkdirSync(suiteDir,{recursive:true});
+    const script=join(scriptDir,'run-value-block-range-v0.mjs');
+    writeFileSync(script,readFileSync(new URL('../scripts/run-value-block-range-v0.mjs',import.meta.url)));
+    const env={...process.env,ATTO_VBR_LANE:'hdl-rtl-simulation'};
+    for(const key of Object.keys(env))if(key.startsWith('ATTO_VBR_')&&key!=='ATTO_VBR_LANE')delete env[key];
+    for(const id of ['../escape',manifest.cases[1].id]){
+      const corrupt=structuredClone(manifest);
+      corrupt.cases[0].id=id;
+      writeFileSync(join(suiteDir,'cases.json'),JSON.stringify(corrupt));
+      const result=spawnSync(process.execPath,[script],{env,encoding:'utf8',timeout:10000});
+      assert.equal(result.status,1);
+      const report=JSON.parse(result.stdout);
+      assert.equal(report.passed,0);
+      assert.equal(report.certified_guest_passes,0);
+      assert.match(report.observations[0].detail,/wrong or incomplete canonical suite/);
+    }
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });

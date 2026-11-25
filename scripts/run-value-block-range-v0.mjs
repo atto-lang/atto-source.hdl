@@ -13,7 +13,7 @@
 //                              rs-native | cranelift-native | js-worker |
 //                              hdl-rtl-simulation
 // No shell expansion, no host-language simulation and no skipped cases.
-import {readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, statSync} from 'node:fs';
+import {readFileSync, writeFileSync, mkdtempSync, existsSync, lstatSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -33,6 +33,7 @@ const sha256=x=>createHash('sha256').update(x).digest('hex');
 const validSha=/^[0-9a-f]{40}$/;
 const observations=[];
 let failures=0;
+let dir;
 
 function requireArgv(key,placeholder){
   const raw=process.env[key];
@@ -65,7 +66,7 @@ function testCase(vector,compileArgv,runArgv,lexArgv,typecheckArgv,parseArgv,dir
   const params={source,artifact,case:name};
   const base={id:name,kind:vector.kind,source_sha256:sha256(vector.source)};
   const assertSourceIntact=()=>{
-    if(!existsSync(source)||sha256(readFileSync(source))!==base.source_sha256)
+    if(!existsSync(source)||!lstatSync(source).isFile()||sha256(readFileSync(source))!==base.source_sha256)
       throw Error('compiler modified or removed canonical guest source fixture');
   };
   if(existsSync(artifact)) throw Error('non-fresh artifact path (fail closed)');
@@ -119,14 +120,14 @@ function testCase(vector,compileArgv,runArgv,lexArgv,typecheckArgv,parseArgv,dir
   assertSourceIntact();
   check(out,out.exit===0,'compiler must accept valid source');
   if(vector.kind!=='accept_execute') throw Error('unexpected vector kind: '+vector.kind);
-  if(!existsSync(artifact)||!statSync(artifact).isFile()||statSync(artifact).size===0)
+  if(!existsSync(artifact)||!lstatSync(artifact).isFile()||lstatSync(artifact).size===0)
     throw Error('real compiler produced no nonempty guest artifact');
   const digest=sha256(readFileSync(artifact));
   const executed=spawn(runArgv,params);
   assertSourceIntact();
   check(executed,executed.exit===vector.expect.exit_code,
     'compiled guest exit does not match contract '+vector.expect.exit_code);
-  if(!existsSync(artifact)||sha256(readFileSync(artifact))!==digest)
+  if(!existsSync(artifact)||!lstatSync(artifact).isFile()||sha256(readFileSync(artifact))!==digest)
     throw Error('guest run mutated/removed the compiled artifact');
   let visitWitness;
   if(Array.isArray(vector.expect.visited)) {
@@ -147,7 +148,9 @@ try {
   if(!/^\.[a-zA-Z0-9]{1,8}$/.test(ext)) throw Error('invalid artifact extension');
   if(manifest.schema!=='attolang.value-block-range.v0' ||
     manifest.status!=='PROPOSED_NOT_COMPILER_VERIFIED' ||
-    !Array.isArray(manifest.cases)||manifest.cases.length<17)
+    !Array.isArray(manifest.cases)||manifest.cases.length!==17||
+    manifest.cases.some(v=>!v||typeof v.id!=='string'||!/^[a-z][a-z0-9_]{0,79}$/.test(v.id))||
+    new Set(manifest.cases.map(v=>v.id)).size!==manifest.cases.length)
     throw Error('wrong or incomplete canonical suite');
   const compile=requireArgv('ATTO_VBR_COMPILE_ARGV_JSON','{source}');
   if(!compile.some(x=>x.includes('{artifact}')))
@@ -157,8 +160,7 @@ try {
     requireArgv('ATTO_VBR_LEX_ARGV_JSON','{source}') : null;
   const typecheck=requireArgv('ATTO_VBR_TYPECHECK_ARGV_JSON','{source}');
   const parse=requireArgv('ATTO_VBR_PARSE_ARGV_JSON','{source}');
-  const dir=mkdtempSync(join(tmpdir(),'atto-vbr-'));
-  mkdirSync(dir,{recursive:true});
+  dir=mkdtempSync(join(tmpdir(),'atto-vbr-'));
   for(const vector of manifest.cases) {
     try { observations.push(testCase(vector,compile,run,lex,typecheck,parse,dir)); }
     catch(error) { failures++; observations.push({
@@ -169,6 +171,8 @@ try {
 } catch(error) {
   failures++;
   observations.push({id:'configuration',status:'failed',detail:String(error.message).slice(0,1400)});
+} finally {
+  if(dir) rmSync(dir,{recursive:true,force:true});
 }
 const git=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8',shell:false});
 const head=(git.status===0 ? git.stdout.trim() : null);
