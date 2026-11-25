@@ -37,6 +37,11 @@ class IntegrationManifestGateTests(unittest.TestCase):
             with self.subTest(repo=repo):
                 self.assertEqual(module.verify_bytes(encode(valid_manifest(repo)), repo)['evidence'], 'not-attested')
 
+    def test_atto_checkout_accepts_the_exact_legacy_hdl_declaration(self):
+        raw = encode(valid_manifest('oreslang-source.hdl'))
+        self.assertEqual(module.verify_bytes(raw, 'atto-source.hdl')['role'], 'compiler')
+        self.assert_reject(encode(valid_manifest('oreslang-source.llvm')), 'atto-source.hdl')
+
     def test_real_local_manifest(self):
         root = Path(__file__).resolve().parent.parent
         self.assertEqual(module.verify_bytes((root / '.oreslang/integration.json').read_bytes(), root.name)['role'], 'compiler')
