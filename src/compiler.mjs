@@ -126,7 +126,7 @@ export function lex(source) {
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   const masked=prepareHardwareSource(source);
   const tokens=[];
-  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|<-|->|•|[()+\-,;.:{}\[\]~&|^?]|./gy;
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?]|./gy;
   for(const m of masked.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)) continue;
@@ -161,7 +161,8 @@ export function lex(source) {
        (['ActorMail','ActorGroup','Topic','Subscription'].includes(value) && next==='<'))
       fail('HDL_ACTOR_UNSUPPORTED',{offset:m.index},
         'actor, supervisor and typed group/topic lifecycle require a target runtime; no RTL lowering');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(value==='%') fail('HDL_REMOVED_OPERATOR',{offset:m.index},'use an explicit typed remainder/modulus operation; no RTL lowering');
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // Canonical exceptional control has no synthesizable typed effect path.
     if(['trap','throw','raise','panic'].includes(value) &&
        source[m.index+value.length]==='!' &&
@@ -312,11 +313,24 @@ export function parseHardwareSource(source) {
   if(braced)take();
   else if(returnFirst&&peek().value==='begin')take();
   else if(!returnFirst)expect('{');
-  expect('return');
+  if(peek().value==='^')take();else expect('return');
   const symbols=new Map(params.map(p=>[p.name,p.width]));
   function primary(depth){
     if(depth>MAX_DEPTH)fail('HDL_DEPTH',peek(),'expression nesting limit');
     if(peek().value==='('){take();const e=expression(depth+1);expect(')');return e;}
+    if(peek().value==='^')
+      fail('HDL_REMOVED_OPERATOR',peek(),'single caret is statement return, not an expression operator; use ^^ for bitwise XOR');
+    if(peek().value==='Integer' && ts[i+1]?.value==='.') {
+      const where=take();take();const member=take();
+      if(member.value!=='bitXor')
+        fail('HDL_INTRINSIC',member,'only Integer.bitXor is supported by this HDL subset');
+      if(symbols.has('Integer'))
+        fail('HDL_INTRINSIC_SHADOW',where,'Integer intrinsic conflicts with an input named Integer');
+      expect('(');const a=expression(depth+1);expect(',');const b=expression(depth+1);expect(')');
+      if(a.width!==b.width)fail('HDL_MISMATCH',member,'Integer.bitXor requires equal unsigned bit widths');
+      if(++expressionNodes>MAX_EXPR_NODES)fail('HDL_EXPR_LIMIT',member,'expression too complex');
+      return {kind:'binary',op:'^',left:a,right:b,width:a.width};
+    }
     const t=take(),bits=symbols.get(t.value);
     if(bits===undefined)fail('HDL_UNBOUND',t,'undeclared or unsupported expression '+t.value);
     return {kind:'input',name:t.value,width:bits};
@@ -328,14 +342,19 @@ export function parseHardwareSource(source) {
       const op=take(),b=next(depth);
       if(a.width!==b.width)fail('HDL_MISMATCH',op,'mixed widths require explicit cast (not implemented)');
       if(++expressionNodes>MAX_EXPR_NODES)fail('HDL_EXPR_LIMIT',op,'expression too complex');
-      a={kind:'binary',op:op.value,left:a,right:b,width:a.width};
+      a={kind:'binary',op:op.value==='^^'?'^':op.value,left:a,right:b,width:a.width};
     }
     return a;
   }
   const additive=(depth)=>binaryLayer(primary,['+','-'],depth);
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
-  const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
-  const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
+  const bitXor=(depth)=>binaryLayer(bitAnd,['^^'],depth);
+  const expression=(depth=0)=>{
+    const a=binaryLayer(bitXor,['|'],depth);
+    if(peek().value==='^')fail('HDL_REMOVED_OPERATOR',peek(),
+      'single caret is statement return, not an expression operator; use ^^ for bitwise XOR');
+    return a;
+  };
   const expr=expression();expect(';');expect(braced?'}':'end');
   if(!braced && (peek().value===';' || peek().value==='.'))take();
   while(peek().value==='export')fileExport();

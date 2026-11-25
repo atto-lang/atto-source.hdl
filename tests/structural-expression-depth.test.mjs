@@ -11,7 +11,7 @@ function chain(terms, operator='+') {
 }
 
 test('bounded left-associated expressions remain executable in the reference and RTL',()=>{
-  for(const operator of ['+','&','^','|']) {
+  for(const operator of ['+','&','^^','|']) {
     const source=chain(24,operator);
     const program=parseHardwareSource(source);
     assert.ok(Object.isFrozen(program.expression));
@@ -24,7 +24,7 @@ test('bounded left-associated expressions remain executable in the reference and
 
 test('long left-associated chains refuse before immutable admission or RTL emission',()=>{
   // 70 leaves produce a 70-level left spine despite zero parentheses.
-  for(const operator of ['+','&','^','|']) {
+  for(const operator of ['+','&','^^','|']) {
     const source=chain(70,operator);
     for(const compile of [parseHardwareSource,compileSource]) {
       assert.throws(
@@ -38,7 +38,7 @@ test('long left-associated chains refuse before immutable admission or RTL emiss
 
 
 test('exact 64-level expression budget admits RTL; level 65 fails closed',()=>{
-  for(const operator of ['+','-','&','^','|']) {
+  for(const operator of ['+','-','&','^^','|']) {
     const accepted=chain(64,operator);
     const program=parseHardwareSource(accepted);
     assert.ok(Object.isFrozen(program.expression));

@@ -65,3 +65,24 @@ test('CLI preserves an existing output file and does not overwrite it',()=>{
     assert.equal(readFileSync(output,'utf8'),'ORIGINAL OUTPUT\n');
   });
 });
+
+test('CLI rejects obsolete infix caret and unsupported modulo without creating RTL',()=>{
+  fixture(({source,output,run})=>{
+    for(const expression of ['a ^ b','a % b','a ^ ^ b']){
+      writeFileSync(source,'pub fnc f(u8 a,u8 b):u8 { return '+expression+'; }');
+      const result=run();
+      assert.equal(result.status,1,result.stderr);
+      assert.match(result.stderr,/HDL_REMOVED_OPERATOR/);
+      assert.equal(existsSync(output),false);
+    }
+  });
+});
+test('canonical .atto caret return and XOR match explicit return and named XOR',()=>{
+  fixture(({dir,output,run})=>{
+    const canonical=join(dir,'program.atto');
+    writeFileSync(canonical,'fnc f(u8 a,u8 b):u8 { ^ a ^^ b; }');
+    const result=run(canonical);
+    assert.equal(result.status,0,result.stderr);
+    assert.match(readFileSync(output,'utf8'),/assign out_result = \(in_a \^ in_b\);/);
+  });
+});

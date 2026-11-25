@@ -28,7 +28,7 @@ async function readBoundedSource(path) {
   }
 }
 import {compileSource} from '../src/compiler.mjs';
-if(process.argv.length!==4){console.error('Usage: node bin/oreslang-hdl.mjs INPUT.ores OUTPUT.sv');process.exitCode=2;}
+if(process.argv.length!==4){console.error('Usage: node bin/oreslang-hdl.mjs INPUT.atto OUTPUT.sv (legacy .ores accepted)');process.exitCode=2;}
 else try{
   const [src,out]=process.argv.slice(2);
   const {systemVerilog}=compileSource(await readBoundedSource(src));

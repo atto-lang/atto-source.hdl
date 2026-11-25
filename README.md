@@ -28,9 +28,11 @@ AttoLang is designed around actors, explicit ownership, and portable concurrency
 
 The experimental scalar frontend bounds the constructed expression AST to 64 levels, including long left-associated chains with shallow parenthesis depth. Over-depth source is refused before recursive rendering, reference evaluation or SystemVerilog emission.
 
+The scalar subset admits unsigned `u1..u64` with equal-width operands, modular addition/subtraction, grouping and bitwise `&`, `|`, `^^`. Statement-leading `^` aliases `return`; a single infix caret is rejected. The explicitly admitted `Integer.bitXor(a,b)` spelling remains a restricted hardware-profile compatibility alias, not a claim of portable signed-int or general library support. Modulo, unary complement, shifts, Boolean effects and dynamic constructs remain unsupported. See [hardware lowering admission](docs/hardware-lowering-admission-v1.md).
+
 ## Building and testing
 
-Consult the checked-in source tree and CI workflows for verified commands and supported targets. Add target-specific build instructions and exact-head execution results as they become available; do not treat a passing host-unit test as proof of guest-language conformance.
+Run `npm test` for host tests; generate RTL with `node bin/oreslang-hdl.mjs tests/fixtures/add8.atto /tmp/add8.sv`. The canonical fixture preserves the historical source bytes. With Icarus and Yosys installed, `node tests/rtl-matrix.mjs` and `node tests/rtl-formal-equivalence.mjs` execute 30 designs / 2,070 vectors and 30 complete-width SAT proofs plus a deliberately corrupted XOR counterexample. Consult the checked-in CI workflows for exact-head evidence. Add target-specific build instructions and exact-head execution results as they become available; do not treat a passing host-unit test as proof of guest-language conformance.
 
 ## Project status
 
