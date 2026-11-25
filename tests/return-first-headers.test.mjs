@@ -105,3 +105,10 @@ test('legacy syntax and existing bang-effect rejection are not weakened',()=>{
       e=>e instanceof HardwareSourceError && e.code==='HDL_EXCEPTION_BANG_UNSUPPORTED');
   }
 });
+
+test('canonical headers preserve namespace, export and ownership rejection',()=>{
+  const actual=parseHardwareSource('use namespace demo; export pub add; u8 <- add(u8 a,u8 b) return a+b; end.');
+  assert.equal(emitSystemVerilog(actual),rtl);
+  assert.throws(()=>parseHardwareSource('u8 <- add(u8 a,u8 b){return borrow! a;}'),e=>e?.code==='HDL_OWNERSHIP_UNSUPPORTED');
+  assert.throws(()=>parseHardwareSource('u8 <- add(u8 a,u8 b){return a+b;} use namespace late;'),e=>e?.code==='HDL_NAMESPACE_HEADER_ORDER');
+});

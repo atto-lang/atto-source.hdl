@@ -27,8 +27,7 @@ parser/reference checks prove only this bounded HDL frontend source path;
 actual Verilog toolchain evaluation and GitHub runner/CI admission must be
 attested separately on the exact commit before broader backend parity claims.
 
-This branch is stacked on the existing HDL exceptional-keyword PR #21 to
-avoid competing lexer edits; merge/review the parent dependency first.
+The scalar headers preserve the exception, ownership, namespace, export and structural-depth admission gates.
 
 ## Proven width inference (no implicit conversions)
 
