@@ -6,14 +6,14 @@ define module perf_counter_slots as
   }
 
   pub fnc can_record(bool enabled, int occupied, int capacity) -> bool {
-    if !enabled || !valid_capacity(capacity); do
+    if !enabled || !valid_capacity(capacity) then
       return false;
     fi
     return occupied >= 0 && occupied < capacity;
   }
 
   pub fnc next_dropped(int dropped, bool should_drop) -> int {
-    if !should_drop || dropped < 0 || dropped >= 2147483647; do
+    if !should_drop || dropped < 0 || dropped >= 2147483647 then
       return dropped;
     fi
     return dropped + 1;
