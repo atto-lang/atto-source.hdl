@@ -56,7 +56,7 @@ test('unsupported syntax and unsafe inputs fail closed',()=>{
     ['fnc f(u8 a,u16 b): u8 { return a+b; }','HDL_MISMATCH'],
     ['fnc f(u8 a,u8 a): u8 { return a; }','HDL_DUPLICATE'],
     ['fnc f(u8 a):u8 { return a*a; }','HDL_TOKEN'],
-    ['fnc f(u8 a):u8 { spawn a; }','HDL_SYNTAX'],
+    ['fnc f(u8 a):u8 { spawn a; }','HDL_ACTOR_UNSUPPORTED'],
     ['fnc f(u8 a):u8 { return unknown; }','HDL_UNBOUND'],
     ['fnc f(u65 a):u65 {return a;}','HDL_WIDTH'],
     ['fnc f(int a):int {return a;}','HDL_WIDTH'],
