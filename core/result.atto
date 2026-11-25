@@ -1,0 +1,23 @@
+// HDL source-level Result<int,int> reference contract (NOT synthesized).
+// Proposed packed ADT ABI: success bit + active signed int payload.
+// Any combinational mux must mask inactive variants, never read both.
+define module result as
+  pub fnc from_flag(bool success, int value): Result<int, int> {
+    if success; do return Ok(value); fi
+    return Err(value);
+  }
+
+  pub fnc unwrap_or(Result<int, int> input, int fallback): int {
+    return match input over
+      on Ok(value) -> value,
+      on Err(_) -> fallback,
+    end;
+  }
+
+  pub fnc map_add(Result<int, int> input, int delta): Result<int, int> {
+    return match input over
+      on Ok(value) -> Ok(value + delta),
+      on Err(error) -> Err(error),
+    end;
+  }
+end

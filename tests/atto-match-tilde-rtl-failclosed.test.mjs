@@ -28,3 +28,9 @@ test('valid fixed-width arithmetic RTL ignores feature tokens inside comments',(
   assert.match(systemVerilog,/assign out_result = \(in_a \+ in_b\)/);
   assert.equal(evaluateReference(program,{a:40n,b:2n}),42n);
 });
+
+test('nested inert match and aggregate trivia do not alter RTL',()=>{
+  const clean='fnc pass(u8 a):u8 {return a;}';
+  const commented='fnc pass(u8 a):u8 { /* outer /* match x */ ~record() */ return a;}';
+  assert.equal(compileSource(commented).systemVerilog,compileSource(clean).systemVerilog);
+});
