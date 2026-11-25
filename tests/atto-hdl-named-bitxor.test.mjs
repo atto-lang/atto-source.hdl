@@ -29,7 +29,7 @@ test('named integer XOR lowers to hardware XOR across fixed widths',()=>{
 });
 
 test('removed punctuation fails closed, including nested expressions',()=>{
-  for(const op of ['^','^^','%']){
+  for(const op of ['^','%']){
     for(const expr of ['a '+op+' b','(a '+op+' b) & a',
                        'Integer.bitXor(a,b) '+op+' a'])
       assert.throws(()=>compileSource(src(expr)),rejects('HDL_REMOVED_OPERATOR'),expr);
@@ -61,9 +61,23 @@ test('removed punctuation inside comments does not change admission',()=>{
   assert.equal(evaluateReference(program,{a:5n,b:3n}),6n);
 });
 
-test('language operators are not silently reinterpreted as bitwise hardware',()=>{
-  for(const expr of ['a & b','a | b','(a | b)','Integer.bitXor(a,b) & a','a | Integer.bitXor(a,b)'])
-    assert.throws(()=>compileSource(src(expr)),rejects('HDL_UNLOWERED_SOURCE_OPERATOR'),expr);
+test('current bitwise syntax preserves typed unsigned hardware semantics',()=>{
+  for(const [expr,value] of [['a & b',0n],['a | b',7n],['a ^^ b',7n],['Integer.bitXor(a,b) & a',2n]])
+    assert.equal(evaluateReference(compileSource(src(expr)).program,{a:2n,b:5n}),value);
   const source='fnc f(u8 a,u8 b):u8 { /* a | b and a & b */ return a+b; }';
   assert.equal(evaluateReference(compileSource(source).program,{a:2n,b:5n}),7n);
+});
+
+test('statement caret return and infix double caret map to identical frozen RTL ASTs',()=>{
+  for(const width of ['u1','u8','u16','u32','u64']){
+    const named=compileSource(src('Integer.bitXor(a,b)',width));
+    const infix=compileSource(src('a ^^ b',width));
+    const caret=compileSource(src('a ^^ b',width).replace('return ','^ '));
+    assert.deepEqual(infix.program,named.program);
+    assert.deepEqual(caret.program,named.program);
+    assert.equal(caret.systemVerilog,named.systemVerilog);
+  }
+  for(const expr of ['a ^ b','^ a','a ^ ^ b','(a ^ b)'])
+    assert.throws(()=>compileSource(src(expr)),rejects('HDL_REMOVED_OPERATOR'));
+  assert.throws(()=>compileSource('fnc f(u8 a,u16 b):u8 { ^ a ^^ b; }'),rejects('HDL_MISMATCH'));
 });

@@ -56,13 +56,13 @@ jobs:
         run: |
           set -euo pipefail
           node tests/rtl-matrix.mjs | tee /tmp/rtl-matrix.log
-          grep -Fx 'RTL_MATRIX_PASS: 1035 vectors across 15 synthesized designs' /tmp/rtl-matrix.log
+          grep -Fx 'RTL_MATRIX_PASS: 2070 vectors across 30 synthesized designs' /tmp/rtl-matrix.log
       - name: Prove RTL equivalence with Yosys SAT and kill negative mutant
         shell: bash
         run: |
           set -euo pipefail
           node tests/rtl-formal-equivalence.mjs | tee /tmp/rtl-formal.log
-          grep -Fx 'HDL_SAT_EQUIVALENCE_PASS: 15 complete-width proofs; 1 mutated RTL counterexample' /tmp/rtl-formal.log
+          grep -Fx 'HDL_SAT_EQUIVALENCE_PASS: 30 complete-width proofs; 1 mutated RTL counterexample' /tmp/rtl-formal.log
       - name: Record exact-head, job-attempt and tool-version-bound evidence
         shell: bash
         env:

@@ -5,9 +5,9 @@
 ## Source and semantics boundary
 
 - The canonical source file extension for new tests is `.atto`; `.ores` remains compatible with pinned historical fixtures.
-- Today's independent parser accepts one pure function, one or more `u1..u64` fixed-width unsigned parameters, a matching return width, and one expression containing only `+`, `-`, grouping and the specifically admitted `Integer.bitXor(a,b)`.
+- Today's independent parser accepts one pure function, one or more `u1..u64` fixed-width unsigned parameters, a matching return width, and one expression containing only `+`, `-`, grouping, equal-width bitwise `&`, `|`, `^^`, and the explicitly admitted hardware-profile compatibility alias `Integer.bitXor(a,b)`. Statement-leading `^` and `return` generate identical RTL.
 - Arithmetic wraps modulo `2^width` in this **experimental HDL profile**. Do not silently equate these unsigned width-specific semantics with AttoLang's general signed/checked `int` arithmetic.
-- Reject operators `%`, `^`, `^^` removed in the current language migration. Reject `|` (logical OR) and `&` (borrow) rather than mislowering either as integer bitwise hardware. Reject unknown `Integer.*` names. No automatic software fallback is allowed on a hardware target.
+- Follow the current [operator contract](https://github.com/atto-lang/atto-spec/blob/main/language/bitwise-and-stream-operators-v1.md): single infix `^` is invalid; contiguous `^^` is XOR. The experimental unsigned hardware profile retains `&` and `|` and extends the operator spellings to equal-width bitvectors; this does not certify portable signed `int`, Boolean logic or stream semantics. Reject unsupported `%`, complement and shifts, and unknown `Integer.*` names. No automatic software fallback is allowed.
 - No source-controlled Verilog tokens, dynamic elaboration scripts, user-provided Yosys commands, inferred clocks, implicit state or RTL identifiers outside admitted grammar.
 - User-constructible or mutated ASTs do not bypass frontend admission; emission requires the immutable parser-admitted AST.
 
@@ -41,7 +41,7 @@ node tests/rtl-matrix.mjs
 node tests/rtl-formal-equivalence.mjs
 ```
 
-The last two require real `iverilog`/`vvp`/`yosys` tools; missing tools must be a failure. The CI receipt is written **after** simulation, synthesis, formal equivalence and the mutation control succeed. On the private GitHub organization, jobs with no executed steps remain `NOT_EXECUTED`, not green.
+The matrix exercises 30 designs and 2,070 vectors; the SAT suite proves 30 designs and requires a negative mutant. The last two require real `iverilog`/`vvp`/`yosys` tools; missing tools must be a failure. The CI receipt is written **after** simulation, synthesis, formal equivalence and the mutation control succeed. On the private GitHub organization, jobs with no executed steps remain `NOT_EXECUTED`, not green.
 
 ## Release hold
 

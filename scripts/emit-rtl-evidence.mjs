@@ -25,7 +25,7 @@ export function createRtlEvidence({env=process.env,read=readFileSync,run=command
   if(env.GITHUB_ACTIONS!=='true' || !integer(env.GITHUB_RUN_ID) ||
      !integer(env.GITHUB_RUN_ATTEMPT) ||
      !/^[A-Za-z_][A-Za-z_0-9-]{0,127}$/.test(env.GITHUB_JOB??''))
-    reject('missing authenticated GitHub Actions execution context');
+    reject('missing GitHub Actions execution context (local receipt is not an attestation)');
   const realHead=run('git',['rev-parse','HEAD']);
   const tree=run('git',['rev-parse','HEAD^{tree}']);
   if(realHead!==head||!hex40(tree))reject('checkout not at pinned exact-head Git tree');
@@ -47,10 +47,10 @@ export function createRtlEvidence({env=process.env,read=readFileSync,run=command
   };
   if(!exactlyOne(logs.simulation,'HDL_ADD8_65536_PASS'))
     reject('missing exhaustive Icarus RTL simulation sentinel');
-  if(!/^RTL_MATRIX_PASS: 1035 vectors across 15 synthesized designs$/m.test(logs.rtlMatrix))
+  if(!exactlyOne(logs.rtlMatrix,'RTL_MATRIX_PASS: 2070 vectors across 30 synthesized designs'))
     reject('missing complete cross-width RTL matrix sentinel');
   if(!exactlyOne(logs.formal,
-    'HDL_SAT_EQUIVALENCE_PASS: 15 complete-width proofs; 1 mutated RTL counterexample'))
+    'HDL_SAT_EQUIVALENCE_PASS: 30 complete-width proofs; 1 mutated RTL counterexample'))
     reject('missing real SAT equivalence plus negative-mutant sentinel');
   // CI invokes Yosys with -T, which suppresses its optional end-of-script
   // footer. The preceding pipefail-bound synthesis command must exit zero.
@@ -76,6 +76,7 @@ export function createRtlEvidence({env=process.env,read=readFileSync,run=command
     sourceSha256:sourceSha,
     legacySourceSha256:sha256(files.legacy),
     generatedRtlSha256:rtlSha,
+    rtlSha256:rtlSha, // compatibility alias; still requires independent run validation
     goldenRtlSha256:sha256(files.golden),
     workflowRunId:env.GITHUB_RUN_ID,
     workflowAttempt:Number(env.GITHUB_RUN_ATTEMPT),
@@ -83,9 +84,9 @@ export function createRtlEvidence({env=process.env,read=readFileSync,run=command
     workflowSha:hex40(env.GITHUB_WORKFLOW_SHA)?env.GITHUB_WORKFLOW_SHA:null,
     ciEvidenceClass:'RTL_SIMULATION_GENERIC_SYNTHESIS_SAT_EQUIVALENCE_ONLY',
     simulationVectors:65536,
-    rtlMatrixDesigns:15,
-    rtlMatrixVectors:1035,
-    formalEquivalenceProofs:15,
+    rtlMatrixDesigns:30,
+    rtlMatrixVectors:2070,
+    formalEquivalenceProofs:30,
     negativeMutantsKilled:1,
     toolVersions:{node,iverilog,yosys},
     logSha256:Object.fromEntries(Object.entries(logs).map(([key,value])=>[key,sha256(value)])),

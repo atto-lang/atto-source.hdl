@@ -12,6 +12,9 @@ const widths=[1,8,16,32,64];
 const operations=[
   {name:'add',source:'a + b',rtl:'+'},
   {name:'sub',source:'a - b',rtl:'-'},
+  {name:'and',source:'a & b',rtl:'&'},
+  {name:'or',source:'a | b',rtl:'|'},
+  {name:'infix-bitxor',source:'a ^^ b',rtl:'^'},
   {name:'named-bitxor',source:'Integer.bitXor(a,b)',rtl:'^'}
 ];
 const dir=mkdtempSync(join(tmpdir(),'atto-hdl-formal-'));
@@ -55,7 +58,7 @@ try{
       mutantsKilled++;
     }
   }
-  if(proven!==15||mutantsKilled!==1)
+  if(proven!==30||mutantsKilled!==1)
     throw Error('formal test count truncated');
   console.log('HDL_SAT_EQUIVALENCE_PASS: '+proven+' complete-width proofs; '+mutantsKilled+' mutated RTL counterexample');
 }finally{
