@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError} from '../src/compiler.mjs';
+import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError,TENANT_VM_RUNTIME_SUPPORT} from '../src/compiler.mjs';
 
 const source=readFileSync(new URL('./fixtures/add8.ores', import.meta.url),'utf8');
 const {program,systemVerilog}=compileSource(source);
@@ -155,4 +155,11 @@ test('typed Topic pubsub denial ignores inert comments and literals',()=>{
     try { compileSource(source); }
     catch(e) { assert.notEqual(e.code,'HDL_ACTOR_PUBSUB_UNSUPPORTED',source); }
   }
+});
+
+test('TenantVM and actor execution fail closed in HDL compiler',()=>{
+  assert.equal(TENANT_VM_RUNTIME_SUPPORT,'UNSUPPORTED');
+  for(const source of ['define actor Worker as end','define tenant_vm Evil as end'])
+    assert.throws(()=>compileSource(source),HardwareSourceError);
+  assert.match(compileSource('fnc pass(u8 a):u8 {return a;}').systemVerilog,/module ores_pass/);
 });

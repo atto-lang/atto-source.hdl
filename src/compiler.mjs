@@ -2,6 +2,8 @@ import {isProxy} from 'node:util/types';
 /** Experimental standalone Oreslang fixed-width source -> combinational SystemVerilog.
  * Not integrated with full Oreslang frontends or shared HIR/MIR. Unsupported syntax fails closed.
  */
+// RTL is not a hosted actor/tenant runtime.
+export const TENANT_VM_RUNTIME_SUPPORT = 'UNSUPPORTED';
 const MAX_SOURCE=128*1024, MAX_TOKENS=4096, MAX_DEPTH=64, MAX_PARAMS=16, MAX_EXPR_NODES=1024;
 const RTL_RESERVED=new Set(['module','endmodule','input','output','wire','reg','logic','assign','always','generate','endgenerate','begin','end','result','if','else','for','while','case','function','task','parameter','localparam','integer','signed','unsigned','default','initial','final','interface','package','import','export','time','tri','wand','wor','supply0','supply1']);
 const rtlIdent=(name)=>!RTL_RESERVED.has(name.toLowerCase()) && name !== 'out_result';
