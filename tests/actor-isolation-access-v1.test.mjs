@@ -73,3 +73,23 @@ test("intrinsic monkeypatch cannot forge allocation grants or bypass live overla
     Set.prototype[Symbol.iterator] = oldIterator;
   }
 });
+
+test("inherited array setters cannot capture or widen allocation ranges", () => {
+  const a = new ActorIsolationAccessV1(1, 2, 3, 64n);
+  let stolen;
+  let grant;
+  Object.defineProperty(Array.prototype, "0", {configurable: true, set(value) {
+    stolen = value;
+    Object.defineProperty(this, "0", {value, writable: true, configurable: true, enumerable: true});
+  }});
+  try { grant = a.issueAllocation(8n, 8n); }
+  finally { delete Array.prototype[0]; }
+  assert.equal(stolen, undefined);
+  assert.equal(a.checkedOffset(grant, 2n, 8n), 8n);
+  assert.throws(() => a.checkedOffset(grant, 8n, 8n), /outside/);
+  const old = Number.isSafeInteger;
+  try {
+    Number.isSafeInteger = () => true;
+    assert.throws(() => new ActorIsolationAccessV1(1.5, 2, 3, 64n), /invalid/);
+  } finally { Number.isSafeInteger = old; }
+});

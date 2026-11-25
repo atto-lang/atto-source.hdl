@@ -12,8 +12,10 @@ const trustedSet = WeakMap.prototype.set;
 const trustedDelete = WeakMap.prototype.delete;
 const trustedFreeze = Object.freeze;
 const trustedCreate = Object.create;
+const trustedDefineProperty = Object.defineProperty;
+const trustedIsSafeInteger = Number.isSafeInteger;
 function positiveId(value) {
-  return Number.isSafeInteger(value) && value > 0;
+  return trustedIsSafeInteger(value) && value > 0;
 }
 function bounded(start, size, limit) {
   return typeof start === "bigint" && typeof size === "bigint" &&
@@ -51,9 +53,12 @@ export class ActorIsolationAccessV1 {
         throw new RangeError("overlapping live actor allocations");
     }
     const grant = trustedFreeze(trustedCreate(null));
-    const range = {start: startBytes, end: startBytes + lengthBytes};
+    const range = trustedFreeze({start: startBytes, end: startBytes + lengthBytes});
     trustedApply(trustedSet, this.#grants, [grant, range]);
-    this.#live[this.#live.length] = range;
+    // Define an own array slot; inherited numeric setters must not see the range.
+    trustedDefineProperty(this.#live, this.#live.length, {
+      value: range, writable: true, configurable: true, enumerable: true
+    });
     return grant;
   }
 
