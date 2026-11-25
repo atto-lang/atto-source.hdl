@@ -1,0 +1,8 @@
+// TARGET_PROFILE_REJECTION: hardware RTL synthesis.
+// NOT_EXECUTED: backend must reject std.assert in hardware-synthesis mode, not elide it.
+// This fixture MUST fail type/admission checks for this target profile.
+import module assert from pkg "std.assert";
+pub routine main(): void {
+  assert.true(false);
+  return;
+}
