@@ -21,3 +21,7 @@ test('a trailing public export preserves the generated RTL module', () => {
   assert.equal(publicExport, plain);
   assert.match(publicExport, /module ores_sum\(/);
 });
+
+test('duplicate exports across the declaration boundary are denied',()=>{
+  assert.throws(()=>compileSource('export pub sum; '+source+' export pub fnc sum;'),e=>e?.code==='HDL_EXPORT_DUPLICATE');
+});
