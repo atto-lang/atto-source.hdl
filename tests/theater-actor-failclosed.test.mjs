@@ -28,7 +28,7 @@ test('Theater/Director/Ensemble source cannot become accidental combinational RT
   assert.equal(fixtureSha,'8a981a3545e0307387af83b0fc306c012d52f831');
   for(const source of scenarios) {
     assert.throws(()=>compileSource(source),
-      e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_UNSUPPORTED',source);
+      e=>e instanceof HardwareSourceError && e.code===(source.startsWith('define actor') || source===sharedGuest?'HDL_ACTOR_MEMORY_UNSUPPORTED':'HDL_ACTOR_UNSUPPORTED'),source);
   }
 });
 
@@ -54,7 +54,7 @@ test('real CLI refuses unsupported Theater actor source without producing RTL',(
       const child=spawnSync(process.execPath,[cli,source,output],
         {encoding:'utf8',timeout:30000});
       assert.equal(child.status,1,child.stderr);
-      assert.match(child.stderr,/HDL_ACTOR_UNSUPPORTED/);
+      assert.match(child.stderr,sample.startsWith('define actor') || sample===sharedGuest?/HDL_ACTOR_MEMORY_UNSUPPORTED/:/HDL_ACTOR_UNSUPPORTED/);
       assert.equal(existsSync(output),false,'unsupported actor source emitted RTL');
     }
   }finally {rmSync(dir,{recursive:true,force:true});}
@@ -74,14 +74,14 @@ test('exact shared Ensemble share! fixture is denied as typed unsupported source
     'pub fnc calc(u8 x): u8 { return topic /*comment*/ . try_publish(share!x); }',
     'pub fnc calc(u8 x): u8 { return topic?.try_publish(share! x); }'
   ]) assert.throws(()=>compileSource(candidate),
-    e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_UNSUPPORTED',
+    e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_PUBSUB_UNSUPPORTED',
     candidate);
   const inert='pub fnc add(u8 x,u8 y):u8 {return x+y;} '
     +'// topic.try_publish(share! x)?';
   assert.match(compileSource(inert).systemVerilog,/module ores_add\(/);
   assert.throws(()=>compileSource('pub fnc add(u8 x):u8{return x;} '
     +'"topic.try_publish(share! x)"'),
-    e=>e instanceof HardwareSourceError && e.code==='HDL_SYNTAX',
+    e=>e instanceof HardwareSourceError && e.code==='HDL_TOKEN',
     'string literals must not become actor capability evidence');
 });
 
@@ -96,7 +96,7 @@ test('actual HDL CLI emits no RTL for canonical Ensemble source',()=>{
     const result=spawnSync(process.execPath,[cli,source,output],
       {encoding:'utf8',timeout:30000});
     assert.equal(result.status,1,result.stderr);
-    assert.match(result.stderr,/HDL_ACTOR_UNSUPPORTED/);
+    assert.match(result.stderr,/HDL_ACTOR_PUBSUB_UNSUPPORTED/);
     assert.equal(existsSync(output),false,'unlowered Ensemble source emitted RTL');
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError} from '../src/compiler.mjs';
+import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError,TENANT_VM_RUNTIME_SUPPORT} from '../src/compiler.mjs';
 
 const source=readFileSync(new URL('./fixtures/add8.ores', import.meta.url),'utf8');
 const {program,systemVerilog}=compileSource(source);
@@ -24,6 +24,32 @@ test('subtraction underflows by modular arithmetic',()=>{
   const p=parseHardwareSource('pub fnc sub(u8 a, u8 b): u8 { return a - b; }');
   assert.equal(evaluateReference(p,{a:0n,b:1n}),255n);
 });
+test('actor-owned heap and object allocation fail closed before RTL generation',()=>{
+  const candidates=[
+    'define class Node as int value Node? next end',
+    'define pub class Node as int value end',
+    'pub define actor A as end',
+    'define actor A as end',
+    'pub fnc f(u8 a):u8 { return new Node(a); }'
+  ];
+  for(const source of candidates){
+    assert.throws(()=>compileSource(source),
+      e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_MEMORY_UNSUPPORTED',
+      source);
+    assert.throws(()=>parseHardwareSource(source),
+      e=>e instanceof HardwareSourceError && e.code==='HDL_ACTOR_MEMORY_UNSUPPORTED',
+      source);
+  }
+  // No SystemVerilog output may be produced for the canonical actor graph.
+  const graph='define class Node as int value Node? next end\ndefine actor HeapGraphProbe as receive(int m) { let first = new Node(42, none) assert(first.next?.value == 42) } end';
+  assert.throws(()=>compileSource(graph),HardwareSourceError);
+  // Comments never introduce active source authority.
+  assert.doesNotThrow(()=>compileSource(
+    'fnc f(u8 a): u8 { return a; } // define actor HeapGraphProbe as end'));
+  assert.doesNotThrow(()=>compileSource(
+    'fnc f(u8 a): u8 { return a; } /* new Node(a) */'));
+});
+
 test('unsupported syntax and unsafe inputs fail closed',()=>{
   const cases=[
     ['fnc f(u8 a): u16 { return a; }','HDL_RETURN_WIDTH'],
@@ -92,4 +118,48 @@ test('long arithmetic chains are rejected before RTL emission',()=>{
   const chain='a'+('+a').repeat(1030);
   assert.throws(()=>compileSource('fnc f(u8 a): u8 { return '+chain+'; }'),
     e=>e instanceof HardwareSourceError && e.code==='HDL_EXPR_LIMIT');
+});
+
+
+test('canonical typed Topic.try_publish alias fails before any HDL RTL artifact',()=>{
+  const canonical=readFileSync(new URL('./fixtures/canonical-unlowered-try-publish.atto',import.meta.url),'utf8');
+  const reject=e=>e instanceof HardwareSourceError &&
+    e.code==='HDL_ACTOR_PUBSUB_UNSUPPORTED' &&
+    e.message.includes('Topic.try_publish');
+  for(const source of [
+    canonical,
+    'fnc f(u8 a):u8 {return alias.try_publish(share! event);}',
+    'fnc f(u8 a):u8 {return alias /* outer /* nested */ end */ . try_publish(share! event);}',
+    'fnc f(u8 a):u8 {return alias?.try_publish(share! event);}',
+    'fnc f(u8 a):u8 {return alias.try_publish;}',
+    '// ignored alias.try_publish(1)?\nfnc f(u8 a):u8 {return other.try_publish(1);}'
+  ]) {
+    assert.throws(()=>parseHardwareSource(source),reject,source);
+    assert.throws(()=>compileSource(source),reject,source);
+  }
+});
+
+test('typed Topic pubsub denial ignores inert comments and literals',()=>{
+  // Standalone similarly named callables remain distinct; an irrelevant
+  // comment or string may still be rejected by the scalar RTL grammar,
+  // but must not be falsely labelled typed Topic publication.
+  const allowed='fnc try_publish(u8 value):u8{return value;}';
+  assert.equal(compileSource(allowed).program.name,'try_publish');
+  for(const source of [
+    'fnc f(u8 a):u8{return a;} // alias.try_publish(share! event)?',
+    'fnc f(u8 a):u8{return a;} /* alias.try_publish(share! event) */',
+    'fnc f(u8 a):u8{return a;} /* nested /* alias.try_publish() */ outer */',
+    'fnc f(u8 a):u8{return alias.try_publisher;}',
+    'fnc f(u8 a):u8{return "alias.try_publish(1)";}'
+  ]) {
+    try { compileSource(source); }
+    catch(e) { assert.notEqual(e.code,'HDL_ACTOR_PUBSUB_UNSUPPORTED',source); }
+  }
+});
+
+test('TenantVM and actor execution fail closed in HDL compiler',()=>{
+  assert.equal(TENANT_VM_RUNTIME_SUPPORT,'UNSUPPORTED');
+  for(const source of ['define actor Worker as end','define tenant_vm Evil as end'])
+    assert.throws(()=>compileSource(source),HardwareSourceError);
+  assert.match(compileSource('fnc pass(u8 a):u8 {return a;}').systemVerilog,/module ores_pass/);
 });

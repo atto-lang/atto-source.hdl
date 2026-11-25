@@ -22,9 +22,8 @@ test('HDL task lowering fails closed: never convert sync into spawn, join or RTL
     'do sync task<void> {};',
     'return await task { return a; };'
   ]){
-    // Typed generics are not part of the HDL lexer; those fail earlier at
-    // HDL_TOKEN. The no-generic forms get a dedicated task diagnostic.
-    rejects(inFn(statement),statement.includes('<')?'HDL_TOKEN':'HDL_TASK_UNSUPPORTED');
+    // Reject task prefixes before generic punctuation obscures their diagnostic.
+    rejects(inFn(statement),'HDL_TASK_UNSUPPORTED');
   }
   rejects('pub fnc sync(u8 a, u8 b): u8 { return a+b; }','HDL_TASK_UNSUPPORTED');
   rejects(inFn('return await a;'),'HDL_TASK_UNSUPPORTED');
@@ -49,7 +48,7 @@ test('actual CLI rejects task source without generating any RTL artifact',()=>{
     const cli=fileURLToPath(new URL('../bin/oreslang-hdl.mjs',import.meta.url));
     for(const [body,diagnostic] of [
       [inFn('do sync task {}; return a+b;'),'HDL_TASK_UNSUPPORTED'],
-      [inFn('return sync task<int> { return a; };'),'HDL_TOKEN']
+      [inFn('return sync task<int> { return a; };'),'HDL_TASK_UNSUPPORTED']
     ]){
       writeFileSync(source,body);
       const result=spawnSync(process.execPath,[cli,source,output],
