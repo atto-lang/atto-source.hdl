@@ -129,6 +129,13 @@ export function lex(source) {
     if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
       'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
     if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    // Canonical exceptional control has no synthesizable typed effect path.
+    if(['trap','throw','raise','panic'].includes(value) &&
+       source[m.index+value.length]==='!' &&
+       source[m.index+value.length+1]!=='=' &&
+       !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
+      fail('HDL_EXCEPTION_BANG_UNSUPPORTED',{offset:m.index},
+        'typed exceptional control cannot be synthesized to RTL');
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
