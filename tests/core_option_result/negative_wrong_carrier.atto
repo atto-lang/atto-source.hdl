@@ -1,0 +1,5 @@
+// MUST reject with no RTL artifact; Err cannot satisfy Option<int>.
+fnc invalid(): Option<int> {
+  return Err(7);
+}
+pub fnc main(): int { return 0; }

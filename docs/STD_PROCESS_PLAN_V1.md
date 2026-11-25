@@ -47,13 +47,11 @@ native HDL guest execution or a hardware capability.
 
 The expected-exit-42 Atto fixture documents the pure source policy,
 but the present HDL compiler's supported subset cannot be assumed to
-compile its module/import/function forms. Source, HDL compilation,
-negative unsupported diagnostics and guest execution are currently
-**NOT EXECUTED / NOT VERIFIED**. No claim of process-spawn parity.
+compile its module/import/function forms. The checked-in Node regression executes the actual scalar HDL compiler's negative import admission for this target. Pure policy compilation, positive guest execution and hosted process behavior remain **NOT EXECUTED / NOT VERIFIED**. No claim of process-spawn parity.
 
 ## Lowercase public module name (2026-11-22)
 
-The module is declared `define module process as`, and guest code imports
+The future public process module is to be declared `define module process as`, and guest code imports
 `import module process from "std/process";`, or explicitly
 `import module process from "atto.std/process";`. Member calls use lowercase
 `process.spawn(...)`. Public types such as `Command` and `ExitStatus`
