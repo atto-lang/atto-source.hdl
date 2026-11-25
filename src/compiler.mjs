@@ -148,6 +148,10 @@ export function lex(source) {
        !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
       fail('HDL_EXCEPTION_BANG_UNSUPPORTED',{offset:m.index},
         'typed exceptional control cannot be synthesized to RTL');
+    if(value==='match') fail('HDL_MATCH_DEFAULT_UNSUPPORTED',{offset:m.index},
+      'typed match requires checked combinational selector, exhaustiveness and effect-free arm lowering');
+    if(value==='~') fail('HDL_TILDE_AGGREGATE_UNSUPPORTED',{offset:m.index},
+      'typed Map/Record requires owned aggregate storage and not combinational RTL');
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
