@@ -4,6 +4,54 @@ import {parseHardwareSource,emitSystemVerilog,evaluateReference,HardwareSourceEr
   from '../src/compiler.mjs';
 
 const source='pub fnc add(u8 a,u8 b): u8 { return a+b; }';
+test('bang exceptional controls are explicit backend denials before RTL',()=>{
+  for(const op of ['trap!','throw!','raise!','panic!']){
+    const source='pub fnc main(u8 a):u8{return '+op+' a;}';
+    assert.throws(()=>parseHardwareSource(source),e=>
+      e instanceof HardwareSourceError && e.code==='HDL_EXCEPTION_BANG_UNSUPPORTED');
+  }
+});
+
+
+test('18-case spec exception-bang boundaries preserve nonexceptional HDL token identity',()=>{
+  // 6 canonical positive spellings and 12 nonexceptional collision/trivia
+  // vectors from atto-spec PR #146. All valid effects are intentionally
+  // UNSUPPORTED in this restricted hardware language profile.
+  const canonical=[
+    'trap! parse_id("42")','trap!parse_id("42")',
+    'throw! Error("bad")','raise! Error("bad")',
+    'panic! Error("bad")','throw!Error("bad")'
+  ];
+  for(const expr of canonical){
+    const code='pub fnc main(u8 a):u8{return '+expr+';}';
+    assert.throws(()=>parseHardwareSource(code),e=>
+      e instanceof HardwareSourceError && e.code==='HDL_EXCEPTION_BANG_UNSUPPORTED',
+      'canonical bang was not rejected at source admission: '+expr);
+  }
+  const nonexceptional=[
+    'trap parse_id("42")','throw Error("bad")',
+    'raise Error("bad")','panic Error("bad")',
+    'trap !ready','trap!=next','trap!eq next',
+    'trapped! parse_id()','copy! owned'
+  ];
+  for(const expr of nonexceptional) {
+    const code='pub fnc main(u8 a):u8{return '+expr+';}';
+    assert.throws(()=>parseHardwareSource(code),error=>error instanceof HardwareSourceError && error.code!=='HDL_EXCEPTION_BANG_UNSUPPORTED',expr);
+  }
+  for(const trailer of [
+    '// trap! throw! raise! panic!',
+    '/* trap! throw! raise! panic! */'
+  ]){
+    const valid='pub fnc main(u8 a):u8{return a;} '+trailer;
+    assert.doesNotThrow(()=>parseHardwareSource(valid),
+      'comment should not become a guest exceptional effect');
+  }
+  // Strings may be outside the HDL subset, but may never trigger the
+  // exceptional-control denial merely because they contain keywords.
+  const quote='pub fnc main(u8 a):u8{return "trap! throw! raise! panic!";}';
+  assert.throws(()=>parseHardwareSource(quote),error=>error instanceof HardwareSourceError && error.code!=='HDL_EXCEPTION_BANG_UNSUPPORTED');
+});
+
 const denied=e=>e instanceof HardwareSourceError && e.code==='HDL_UNVERIFIED_AST';
 
 test('parser-admitted program and nested input/expression trees are immutable',()=>{

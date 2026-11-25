@@ -251,9 +251,9 @@ function verifyCoreBorrowCandidate(fixture) {
   assert.doesNotMatch(writeBody, /take! buffer|buffer\.(capacity|consumed)/,
     "a live exclusive loan forbids moving or reading the owner");
   assert.match(readBody, /compute_buffer_range_fits\(2, 3, reader\.capacity\)/);
-  assert.match(readBody, /quic_stream_range_fits\(2, 3, reader\.capacity\)/);
+  assert.match(readBody, /quic_stream_range_fits\(2, 3, second_reader\.capacity\)/);
   assert.match(readBody,
-    /websocket_backpressure_admit\(reader\.consumed, 3, reader\.capacity\)/);
+    /websocket_backpressure_admit\(reader\.consumed, 3, second_reader\.capacity\)/);
   assert.match(writeBody, /writer\.consumed\s*=\s*3;/);
   assert.match(fixture.slice(move), /compute_upload_admit\(2, 3, transferred\.capacity/);
   assert.doesNotMatch(fixture, /(?:^|[^a-zA-Z0-9_])(?:share!|weak!|pin!)(?=\s)/,
