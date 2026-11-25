@@ -24,6 +24,10 @@ This repository is the AttoLang ecosystem home for:
 
 AttoLang is designed around actors, explicit ownership, and portable concurrency semantics. Backend-specific optimizations must not silently change the shared language contract. Runtime capabilities, target restrictions, and unsupported features should be documented explicitly.
 
+**Canonical runtime terminology:** [TenantVM](docs/TENANT_VM_NAMING_V1.md) is the per-tenant execution boundary in AttoLang generally. This HDL compiler does not implement TenantVM or actor execution; unsupported runtime constructs must continue to fail closed.
+
+The experimental scalar frontend bounds the constructed expression AST to 64 levels, including long left-associated chains with shallow parenthesis depth. Over-depth source is refused before recursive rendering, reference evaluation or SystemVerilog emission.
+
 ## Building and testing
 
 Consult the checked-in source tree and CI workflows for verified commands and supported targets. Add target-specific build instructions and exact-head execution results as they become available; do not treat a passing host-unit test as proof of guest-language conformance.
@@ -50,3 +54,11 @@ This README describes the repository's intended responsibilities. Feature suppor
 AttoLang is the canonical project identity. Use `.atto` source and `atto-*` naming for all new documentation and portable library code. This README defines scope, not feature readiness.
 
 **Acceptance:** name exact source SHA/tree, runtime/toolchain, positive and negative checks and execution receipt before claiming support. Host-only tests and empty CI steps do not prove guest execution.
+
+### Legacy migration and transfer receipts
+
+The historical repository `ores-truffle-oreslang/oreslang-source.hdl` is archived; this canonical repository is a separate AttoLang home. The presence of a similarly named repository, imported source snapshot or migrated PR is not proof of a GitHub ownership transfer, preserved repository ID or executable parity. Retain legacy `.ores` fixtures and command/package spellings only where compatibility requires them until tested replacements are available.
+
+The language/compiler/runtime/tooling and portable ecosystem are governed by [atto-lang](https://github.com/atto-lang); commercial cloud deployments, billing, identity and hosted services belong to [atto-co](https://github.com/atto-co). No repository transfer or commercial carve-out is authorized by this document.
+
+For any future transfer, record exact source commit/tree, stable repository ID, destination rules and visibility, independently approved security and source/target administrative authority, outstanding PRs, Actions, app credentials, packages, releases, webhooks, Pages, dependents and rollback ownership. Do not overwrite an existing repository or mirror private source without explicit authorization. Verify repository identity, tree, controls and executed CI after an actual transfer; an empty or absent job-step list is **NOT_EXECUTED**. Keep transfers independent of syntax renames or full-language AOT/zero-GC claims.

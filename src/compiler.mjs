@@ -12,6 +12,17 @@ function sealExpression(expr) {
   if(expr.kind==='binary'){sealExpression(expr.left);sealExpression(expr.right);}
   return Object.freeze(expr);
 }
+// Bound constructed expression trees, not merely parenthesis depth or node count.
+function enforceStructuralExpressionDepth(expr) {
+  const pending=[[expr,1]];
+  while(pending.length) {
+    const [node,depth]=pending.pop();
+    if(depth>MAX_DEPTH)
+      fail('HDL_DEPTH',{offset:0},'constructed expression AST depth limit');
+    if(node.kind==='binary')
+      pending.push([node.left,depth+1],[node.right,depth+1]);
+  }
+}
 function admitProgram(program) {
   for(const p of program.params)Object.freeze(p);
   Object.freeze(program.params);
@@ -95,28 +106,48 @@ function prepareHardwareSource(source) {
 
 export function lex(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
-  const controlOffset=source.search(/[\x1b\x7f]/);
-  if(controlOffset>=0) fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
+  // Reject Trojan Source reordering controls even in comments/ignored text.
+  // U+200E/200F and U+061C are directional marks; U+202A..202E and
+  // U+2066..2069 control embedding, overrides and isolates.
+  const bidiOffset = source.search(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u);
+  if(bidiOffset>=0)
+    fail('HDL_BIDI_CONTROL',{offset:bidiOffset},'bidirectional Unicode formatting control in source');
+  // Unicode NEL/LS/PS can disguise line/comment boundaries in source views.
+  // Reject before lexer whitespace and comment recognition.
+  const lineControlOffset = source.search(/[\u0085\u2028\u2029]/u);
+  if(lineControlOffset>=0)
+    fail('HDL_SOURCE_LINE_CONTROL',{offset:lineControlOffset},'Unicode line separator in source');
+  // Source text admitted by the scalar JS frontend must not be allowed to
+  // disguise terminal ESC/DEL inside lexically ignored HDL comments.
+  const controlOffset = source.search(/[\x1b\x7f]/);
+  if(controlOffset>=0)
+    fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   const masked=prepareHardwareSource(source);
   const tokens=[];
-  const re=/[\s\u0085]+|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^]|./gy;
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?]|./gy;
   for(const m of masked.matchAll(re)) {
     const value=m[0];
-    if(/^[\s\u0085]+$/.test(value)) continue;
+    if(/^\s+$/.test(value)) continue;
     if(['copy','take','borrow','share'].includes(value) &&
        source[m.index+value.length]==='!' &&
        source[m.index+value.length+1]!=='=' &&
-       !(source.slice(m.index+value.length+1,m.index+value.length+3)==='eq' &&
-         !/[A-Za-z0-9_]/.test(source[m.index+value.length+3]??'')))
+       !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
       fail('HDL_OWNERSHIP_UNSUPPORTED',{offset:m.index},
-           'OWNERSHIP_BANG_BACKEND_UNSUPPORTED: typed ownership has no SystemVerilog lowering');
+        'OWNERSHIP_BANG_BACKEND_UNSUPPORTED: typed ownership has no SystemVerilog lowering');
     // The RTL subset has no import linker, allocator or hosted/actor runtime.
     // Reject an actual import token *before* the quote/path lexer error, so
     // canonical atto.core/alloc/std requests cannot be mistaken for supported
     // freestanding libraries or emit a partial hardware artifact.
     if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
       'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    // Canonical exceptional control has no synthesizable typed effect path.
+    if(['trap','throw','raise','panic'].includes(value) &&
+       source[m.index+value.length]==='!' &&
+       source[m.index+value.length+1]!=='=' &&
+       !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
+      fail('HDL_EXCEPTION_BANG_UNSUPPORTED',{offset:m.index},
+        'typed exceptional control cannot be synthesized to RTL');
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
@@ -152,10 +183,36 @@ function rejectSingletonDeclarations(tokens) {
         'ORES-SINGLETON-UNSUPPORTED: application-domain identity, exactly-once publication and fair unique-owner RW memory cannot be emitted as combinational RTL');
   }
 }
+
+// A combinational RTL scalar program has no guest object heap, nominal
+// class layout, Ref32 authority, actor incarnation or ownership/borrowing.
+// Reject active guest constructs before emitting any SystemVerilog. Scanning
+// lexed tokens keeps comments inert and does not grant allocation authority.
+function rejectHybridActorMemory(ts) {
+  for(let i=0;i<ts.length;i++) {
+    const t=ts[i];
+    if(t.value==='new' && ts[i+1]?.value!=='<eof>') {
+      fail('HDL_ACTOR_MEMORY_UNSUPPORTED',t,
+        'object construction requires typed actor-local heap and ownership lowering');
+    }
+    if(t.value!=='pub' && t.value!=='define')continue;
+    let p=i;
+    if(ts[p]?.value==='pub')p++;
+    if(ts[p]?.value!=='define')continue;
+    p++;
+    if(ts[p]?.value==='pub')p++;
+    if(ts[p]?.value==='class' || ts[p]?.value==='actor') {
+      fail('HDL_ACTOR_MEMORY_UNSUPPORTED',ts[p],
+        'nominal actor and class declarations require Ref32 and lifecycle lowering; no RTL fallback');
+    }
+  }
+}
+
 export function parseHardwareSource(source) {
   const ts=lex(source); let i=0;
   rejectSingletonDeclarations(ts);
   rejectExecutionDomains(ts);
+  rejectHybridActorMemory(ts);
   const peek=()=>ts[i],take=()=>ts[i++];
   const expect=want=>{const t=take();if(t.value!==want)fail('HDL_SYNTAX',t,'expected '+want+', got '+t.value);return t;};
   const ident=()=>{const t=take();if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.value))fail('HDL_IDENT',t,'expected identifier');if(!rtlIdent(t.value))fail('HDL_RESERVED',t,'identifier reserved by RTL backend');return t.value;};
@@ -214,6 +271,7 @@ export function parseHardwareSource(source) {
   expect('<eof>');
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
+  enforceStructuralExpressionDepth(expr);
   return admitProgram({name,params,returnWidth,expression:expr});
 }
 function renderExpr(e){

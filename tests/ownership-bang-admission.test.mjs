@@ -73,3 +73,11 @@ test('the CLI emits RTL only for supported source', () => {
     rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test('existing source line-control denials and exception/ownership comment boundaries remain intact', () => {
+  for (const ch of ['\u0085','\u2028','\u2029'])
+    assert.throws(()=>lex(source('/* '+ch+' */ item')), e=>e.code==='HDL_SOURCE_LINE_CONTROL');
+  assert.doesNotThrow(()=>parseHardwareSource(source('/* outer /* trap! item */ borrow!mut item */ item')));
+  for (const e of ['borrow!=item','borrow!eq item','borrow !item'])
+    assert.throws(()=>parseHardwareSource(source(e)), err=>err instanceof HardwareSourceError && err.code!=='HDL_OWNERSHIP_UNSUPPORTED');
+});
