@@ -36,9 +36,7 @@ test('18-case spec exception-bang boundaries preserve nonexceptional HDL token i
   ];
   for(const expr of nonexceptional) {
     const code='pub fnc main(u8 a):u8{return '+expr+';}';
-    try {parseHardwareSource(code);}
-    catch(error){assert.notEqual(error?.code,'HDL_EXCEPTION_BANG_UNSUPPORTED',
-      'nonexceptional source misclassified: '+expr);}
+    assert.throws(()=>parseHardwareSource(code),error=>error instanceof HardwareSourceError && error.code!=='HDL_EXCEPTION_BANG_UNSUPPORTED',expr);
   }
   for(const trailer of [
     '// trap! throw! raise! panic!',
@@ -51,8 +49,7 @@ test('18-case spec exception-bang boundaries preserve nonexceptional HDL token i
   // Strings may be outside the HDL subset, but may never trigger the
   // exceptional-control denial merely because they contain keywords.
   const quote='pub fnc main(u8 a):u8{return "trap! throw! raise! panic!";}';
-  try {parseHardwareSource(quote);}
-  catch(error){assert.notEqual(error?.code,'HDL_EXCEPTION_BANG_UNSUPPORTED');}
+  assert.throws(()=>parseHardwareSource(quote),error=>error instanceof HardwareSourceError && error.code!=='HDL_EXCEPTION_BANG_UNSUPPORTED');
 });
 
 const denied=e=>e instanceof HardwareSourceError && e.code==='HDL_UNVERIFIED_AST';
