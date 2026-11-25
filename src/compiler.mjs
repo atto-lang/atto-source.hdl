@@ -52,7 +52,9 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
  * The scan is source-length bounded by lex(), accepts nested block trivia,
  * and recognizes the canonical U+0085 line-comment terminator.
  */
-function rejectUnloweredTopicPublish(source) {
+function prepareHardwareSource(source) {
+  const masked=source.split('');
+  const blank=(start,end)=>masked.fill(' ',start,end);
   let previous='';
   const isStart=c=>c!==undefined&&/[A-Za-z_]/.test(c);
   const isPart=c=>c!==undefined&&/[A-Za-z0-9_]/.test(c);
@@ -61,7 +63,9 @@ function rejectUnloweredTopicPublish(source) {
     const c=source[i];
     if(/\s/.test(c)||c==='\u0085'){i++;continue;}
     if(c==='/'&&source[i+1]==='/'){
+      const start=i;
       i+=2;while(i<source.length&&!lineEnd(source[i]))i++;
+      blank(start,i);
       continue;
     }
     if(c==='/'&&source[i+1]==='*'){
@@ -74,6 +78,7 @@ function rejectUnloweredTopicPublish(source) {
         else i++;
       }
       if(depth)fail('HDL_TOKEN',{offset:start},'unterminated block comment');
+      blank(start,i);
       continue;
     }
     if(c==='"'||c==="'"||c==='`'){
@@ -96,6 +101,7 @@ function rejectUnloweredTopicPublish(source) {
     }
     previous=c==='.'?'.':'other';i++;
   }
+  return masked.join('');
 }
 
 export function lex(source) {
@@ -116,12 +122,18 @@ export function lex(source) {
   const controlOffset = source.search(/[\x1b\x7f]/);
   if(controlOffset>=0)
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
-  rejectUnloweredTopicPublish(source);
+  const masked=prepareHardwareSource(source);
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?]|./gy;
-  for(const m of source.matchAll(re)) {
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?]|./gy;
+  for(const m of masked.matchAll(re)) {
     const value=m[0];
-    if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
+    if(/^\s+$/.test(value)) continue;
+    if(['copy','take','borrow','share'].includes(value) &&
+       source[m.index+value.length]==='!' &&
+       source[m.index+value.length+1]!=='=' &&
+       !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
+      fail('HDL_OWNERSHIP_UNSUPPORTED',{offset:m.index},
+        'OWNERSHIP_BANG_BACKEND_UNSUPPORTED: typed ownership has no SystemVerilog lowering');
     // The RTL subset has no import linker, allocator or hosted/actor runtime.
     // Reject an actual import token *before* the quote/path lexer error, so
     // canonical atto.core/alloc/std requests cannot be mistaken for supported
