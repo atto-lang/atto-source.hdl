@@ -30,3 +30,7 @@ The operator authorized token-free private exact-tree mirroring into an alternat
 - Verify .NET native host test and native AOT on a real .NET toolchain, Java JDK 25 + Truffle, native LLVM AOT, and Wasm guest runtime separately.
 - Re-test the **whole exact PR head/tree**, not only verified individual Git blobs, on a carrier with real runner jobs and nonzero steps.
 - Keep PRs Draft and do not promote from a source-only, host-only or zero-step result.
+
+## HDL-only staging scope
+
+This integration is limited to backend-owned, unlinked policy source and source-model tests. The real HDL frontend negative admission tests check that socket imports cannot produce RTL. No compiled UDP guest, socket runtime, physical networking, or cross-backend certification is approved by this integration. The mandatory gates above remain required for executable feature promotion, not for retaining the source candidates.

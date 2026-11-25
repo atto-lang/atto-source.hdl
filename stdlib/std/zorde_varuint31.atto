@@ -1,0 +1,22 @@
+// HDL-local combinational scalar Zorde primitives only, no dynamic frames.
+// NOT_EXECUTED: bit-accurate synthesis/RTL equivalence is not yet proved.
+define module zorde_varuint31 as
+  pub fnc valid_varuint31(int value): bool {
+    return value >= 0 && value <= 2147483647;
+  }
+
+  pub fnc varuint31_encoded_octets(int value): int {
+    if !valid_varuint31(value); do return -1; fi
+    if value < 128; do return 1; fi
+    if value < 16384; do return 2; fi
+    if value < 2097152; do return 3; fi
+    if value < 268435456; do return 4; fi
+    return 5;
+  }
+
+  pub fnc zigzag31(int value): int {
+    if value < -1073741824 || value > 1073741823; do return -1; fi
+    if value < 0; do return (-value - 1) * 2 + 1; fi
+    return value * 2;
+  }
+end
