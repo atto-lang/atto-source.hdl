@@ -19,3 +19,10 @@ test('HDL rejects unknown, duplicate, class and package-only exports',()=>{
     assert.throws(()=>compileSource(declaration+'\n'+source),e=>e?.code===code,declaration);
   }
 });
+
+test('namespace remains first and unique when exports are present',()=>{
+  const plain=compileSource(source).systemVerilog;
+  assert.equal(compileSource('use namespace demo; export pub sum; '+source).systemVerilog,plain);
+  assert.throws(()=>compileSource('use namespace demo; '+source+' export pub sum; use namespace other;'),e=>e?.code==='HDL_NAMESPACE_DUPLICATE');
+  assert.throws(()=>compileSource(source+' export pub sum; use namespace other;'),e=>e?.code==='HDL_NAMESPACE_HEADER_ORDER');
+});
