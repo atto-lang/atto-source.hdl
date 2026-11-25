@@ -28,7 +28,7 @@ test('RTL compiler fails closed rather than treating Core import as hardware',()
   assert.throws(()=>compileSource(code));
  }
  // A real fixed-width scalar source remains separate and synthesizeable.
- const baseline=compileSource('pub fnc xor_bits(u8 a,u8 b):u8{return a ^ b;}');
+ const baseline=compileSource('pub fnc xor_bits(u8 a,u8 b):u8{return a ^^ b;}');
  assert.match(baseline.systemVerilog,/module ores_xor_bits/);
 });
 test('reference hash vector is not a compiled hardware guest',()=>{
