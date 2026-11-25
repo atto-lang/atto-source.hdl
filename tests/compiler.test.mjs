@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError} from '../src/compiler.mjs';
+import {compileSource,parseHardwareSource,evaluateReference,HardwareSourceError,TENANT_VM_RUNTIME_SUPPORT} from '../src/compiler.mjs';
 
 const source=readFileSync(new URL('./fixtures/add8.ores', import.meta.url),'utf8');
 const {program,systemVerilog}=compileSource(source);
@@ -56,7 +56,7 @@ test('unsupported syntax and unsafe inputs fail closed',()=>{
     ['fnc f(u8 a,u16 b): u8 { return a+b; }','HDL_MISMATCH'],
     ['fnc f(u8 a,u8 a): u8 { return a; }','HDL_DUPLICATE'],
     ['fnc f(u8 a):u8 { return a*a; }','HDL_TOKEN'],
-    ['fnc f(u8 a):u8 { spawn a; }','HDL_SYNTAX'],
+    ['fnc f(u8 a):u8 { spawn a; }','HDL_ACTOR_UNSUPPORTED'],
     ['fnc f(u8 a):u8 { return unknown; }','HDL_UNBOUND'],
     ['fnc f(u65 a):u65 {return a;}','HDL_WIDTH'],
     ['fnc f(int a):int {return a;}','HDL_WIDTH'],
@@ -84,9 +84,9 @@ test('RTL-reserved identifiers and malformed source fail closed',()=>{
 test('bitwise precedence and 64-bit oracle preserve fixed-width semantics',()=>{
   const cases=[
     ['a | b & c',{a:1n,b:2n,c:0n},1n],
-    ['a ^ b & c',{a:3n,b:3n,c:1n},2n],
+    ['a ^^ b & c',{a:3n,b:3n,c:1n},2n],
     ['a + b & c',{a:255n,b:1n,c:3n},0n],
-    ['a | b ^ c',{a:1n,b:3n,c:2n},1n],
+    ['a | b ^^ c',{a:1n,b:3n,c:2n},1n],
     ['(a | b) & c',{a:1n,b:2n,c:2n},2n]
   ];
   for(const [expr,inputs,expected] of cases){
@@ -95,9 +95,9 @@ test('bitwise precedence and 64-bit oracle preserve fixed-width semantics',()=>{
   }
   const {program}=compileSource('fnc f(u64 a, u64 b): u64 { return a - b; }');
   assert.equal(evaluateReference(program,{a:0n,b:1n}),(1n<<64n)-1n);
-  for(const op of ['&','|','^']){
+  for(const op of ['&','|','^^']){
     const {program:p,systemVerilog}=compileSource('fnc f(u64 a, u64 b): u64 { return a '+op+' b; }');
-    assert.ok(systemVerilog.includes(' '+op+' '));
+    assert.ok(systemVerilog.includes(' '+(op==='^^'?'^':op)+' '));
     assert.equal(evaluateReference(p,{a:(1n<<64n)-1n,b:1n}),op==='&'?1n:op==='|'?(1n<<64n)-1n:(1n<<64n)-2n);
   }
 });
@@ -155,4 +155,11 @@ test('typed Topic pubsub denial ignores inert comments and literals',()=>{
     try { compileSource(source); }
     catch(e) { assert.notEqual(e.code,'HDL_ACTOR_PUBSUB_UNSUPPORTED',source); }
   }
+});
+
+test('TenantVM and actor execution fail closed in HDL compiler',()=>{
+  assert.equal(TENANT_VM_RUNTIME_SUPPORT,'UNSUPPORTED');
+  for(const source of ['define actor Worker as end','define tenant_vm Evil as end'])
+    assert.throws(()=>compileSource(source),HardwareSourceError);
+  assert.match(compileSource('fnc pass(u8 a):u8 {return a;}').systemVerilog,/module ores_pass/);
 });

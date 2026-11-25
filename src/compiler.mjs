@@ -2,6 +2,8 @@ import {isProxy} from 'node:util/types';
 /** Experimental standalone Oreslang fixed-width source -> combinational SystemVerilog.
  * Not integrated with full Oreslang frontends or shared HIR/MIR. Unsupported syntax fails closed.
  */
+// RTL is not a hosted actor/tenant runtime.
+export const TENANT_VM_RUNTIME_SUPPORT = 'UNSUPPORTED';
 const MAX_SOURCE=128*1024, MAX_TOKENS=4096, MAX_DEPTH=64, MAX_PARAMS=16, MAX_EXPR_NODES=1024;
 const RTL_RESERVED=new Set(['module','endmodule','input','output','wire','reg','logic','assign','always','generate','endgenerate','begin','end','result','if','else','for','while','case','function','task','parameter','localparam','integer','signed','unsigned','default','initial','final','interface','package','import','export','time','tri','wand','wor','supply0','supply1']);
 const rtlIdent=(name)=>!RTL_RESERVED.has(name.toLowerCase()) && name !== 'out_result';
@@ -11,6 +13,17 @@ const admittedPrograms=new WeakSet();
 function sealExpression(expr) {
   if(expr.kind==='binary'){sealExpression(expr.left);sealExpression(expr.right);}
   return Object.freeze(expr);
+}
+// Bound constructed expression trees, not merely parenthesis depth or node count.
+function enforceStructuralExpressionDepth(expr) {
+  const pending=[[expr,1]];
+  while(pending.length) {
+    const [node,depth]=pending.pop();
+    if(depth>MAX_DEPTH)
+      fail('HDL_DEPTH',{offset:0},'constructed expression AST depth limit');
+    if(node.kind==='binary')
+      pending.push([node.left,depth+1],[node.right,depth+1]);
+  }
 }
 function admitProgram(program) {
   for(const p of program.params)Object.freeze(p);
@@ -41,7 +54,9 @@ const fail=(code,t,msg)=>{throw new HardwareSourceError(code,t?.offset??0,msg);}
  * The scan is source-length bounded by lex(), accepts nested block trivia,
  * and recognizes the canonical U+0085 line-comment terminator.
  */
-function rejectUnloweredTopicPublish(source) {
+function prepareHardwareSource(source) {
+  const masked=source.split('');
+  const blank=(start,end)=>masked.fill(' ',start,end);
   let previous='';
   const isStart=c=>c!==undefined&&/[A-Za-z_]/.test(c);
   const isPart=c=>c!==undefined&&/[A-Za-z0-9_]/.test(c);
@@ -50,7 +65,9 @@ function rejectUnloweredTopicPublish(source) {
     const c=source[i];
     if(/\s/.test(c)||c==='\u0085'){i++;continue;}
     if(c==='/'&&source[i+1]==='/'){
+      const start=i;
       i+=2;while(i<source.length&&!lineEnd(source[i]))i++;
+      blank(start,i);
       continue;
     }
     if(c==='/'&&source[i+1]==='*'){
@@ -63,6 +80,7 @@ function rejectUnloweredTopicPublish(source) {
         else i++;
       }
       if(depth)fail('HDL_TOKEN',{offset:start},'unterminated block comment');
+      blank(start,i);
       continue;
     }
     if(c==='"'||c==="'"||c==='`'){
@@ -85,6 +103,7 @@ function rejectUnloweredTopicPublish(source) {
     }
     previous=c==='.'?'.':'other';i++;
   }
+  return masked.join('');
 }
 
 export function lex(source) {
@@ -105,19 +124,56 @@ export function lex(source) {
   const controlOffset = source.search(/[\x1b\x7f]/);
   if(controlOffset>=0)
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
-  rejectUnloweredTopicPublish(source);
+  const masked=prepareHardwareSource(source);
   const tokens=[];
-  const re=/\s+|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?]|./gy;
-  for(const m of source.matchAll(re)) {
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?]|./gy;
+  for(const m of masked.matchAll(re)) {
     const value=m[0];
-    if(/^\s+$/.test(value)||value.startsWith('//')||value.startsWith('/*')) continue;
+    if(/^\s+$/.test(value)) continue;
+    if(['copy','take','borrow','share'].includes(value) &&
+       source[m.index+value.length]==='!' &&
+       source[m.index+value.length+1]!=='=' &&
+       !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
+      fail('HDL_OWNERSHIP_UNSUPPORTED',{offset:m.index},
+        'OWNERSHIP_BANG_BACKEND_UNSUPPORTED: typed ownership has no SystemVerilog lowering');
     // The RTL subset has no import linker, allocator or hosted/actor runtime.
     // Reject an actual import token *before* the quote/path lexer error, so
     // canonical atto.core/alloc/std requests cannot be mistaken for supported
     // freestanding libraries or emit a partial hardware artifact.
     if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
       'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    // Refuse unsupported task and actor forms before typed generic punctuation
+    // can obscure the diagnostic. Keep the existing actor-memory and pubsub
+    // categories, and do not reserve longer names or comment text.
+    if(value==='sync'||value==='await')
+      fail('HDL_TASK_UNSUPPORTED',{offset:m.index},
+        'sync/await task requires caller identity and TaskScope; no RTL lowering');
+    const declaration=tokens.at(-1)?.value==='define' ||
+      (tokens.at(-1)?.value==='pub' && tokens.at(-2)?.value==='define');
+    if(declaration && value==='actor')
+      fail('HDL_ACTOR_MEMORY_UNSUPPORTED',{offset:m.index},
+        'nominal actor declarations require Ref32 and lifecycle lowering; no RTL fallback');
+    const nextPunctuation=/\s*([(<])/y;
+    nextPunctuation.lastIndex=m.index+value.length;
+    const next=nextPunctuation.exec(masked)?.[1];
+    if((declaration && value==='supervisor') || value==='spawn' ||
+       (['receive','ActorGroup','Topic','Subscription'].includes(value) && next==='(') ||
+       (['ActorMail','ActorGroup','Topic','Subscription'].includes(value) && next==='<'))
+      fail('HDL_ACTOR_UNSUPPORTED',{offset:m.index},
+        'actor, supervisor and typed group/topic lifecycle require a target runtime; no RTL lowering');
+    if(value==='%') fail('HDL_REMOVED_OPERATOR',{offset:m.index},'use an explicit typed remainder/modulus operation; no RTL lowering');
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    // Canonical exceptional control has no synthesizable typed effect path.
+    if(['trap','throw','raise','panic'].includes(value) &&
+       source[m.index+value.length]==='!' &&
+       source[m.index+value.length+1]!=='=' &&
+       !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
+      fail('HDL_EXCEPTION_BANG_UNSUPPORTED',{offset:m.index},
+        'typed exceptional control cannot be synthesized to RTL');
+    if(value==='match') fail('HDL_MATCH_DEFAULT_UNSUPPORTED',{offset:m.index},
+      'typed match requires checked combinational selector, exhaustiveness and effect-free arm lowering');
+    if(value==='~') fail('HDL_TILDE_AGGREGATE_UNSUPPORTED',{offset:m.index},
+      'typed Map/Record requires owned aggregate storage and not combinational RTL');
     tokens.push({value,offset:m.index});
     if(tokens.length>MAX_TOKENS) fail('HDL_TOKEN_LIMIT',{offset:m.index},'too many tokens');
   }
@@ -197,8 +253,41 @@ export function parseHardwareSource(source) {
   if(peek().value==='use'||peek().value==='namespace')
     fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
       peek(),'namespace header must occur once before all declarations');
+  // Public file exports can surround the single scalar declaration. No package linker.
+  const fileExports=new Set();
+  function fileExport() {
+    const at=expect('export');expect('pub');
+    if(peek().value==='[') {
+      take();expect('pkg');expect(']');
+      fail('HDL_PACKAGE_EXPORT_UNSUPPORTED',at,'RTL module has no package-private linker authority');
+    }
+    if(peek().value==='class')
+      fail('HDL_EXPORT_KIND_UNSUPPORTED',peek(),'HDL cannot lower nominal class types');
+    if(peek().value==='fnc')take();
+    const target=ident();expect(';');
+    if(fileExports.has(target))fail('HDL_EXPORT_DUPLICATE',at,'duplicate export');
+    fileExports.add(target);
+  }
+  while(peek().value==='export')fileExport();
   if(peek().value==='pub')take();
-  expect('fnc'); const name=ident();expect('(');
+  // Return-first type headers must not introduce a new executable language.
+  // The limited u1..u64 forms reuse the exact same admission and RTL AST.
+  const hasFnc=peek().value==='fnc';
+  if(hasFnc)take();
+  const hasReturnMarker=ts[i+1]?.value==='<-' || ts[i+1]?.value==='•';
+  let inferredReturn=hasReturnMarker && peek().value==='infer';
+  const returnFirst=hasReturnMarker &&
+    (inferredReturn || /^u(?:[1-9][0-9]*)$/.test(peek().value));
+  if(!hasFnc && !returnFirst)
+    fail('HDL_SYNTAX',peek(),'expected fnc or return-first typed header');
+  let name,returnWidth=null;
+  if(returnFirst){
+    if(inferredReturn)take(); // contextual infer is proven by the returned AST
+    else returnWidth=width();
+    take();name=ident(); // consume one contiguous <- or bullet separator
+  }
+  else name=ident();
+  expect('(');
   const params=[];
   if(peek().value!==')'){
     do{
@@ -210,11 +299,38 @@ export function parseHardwareSource(source) {
       take();
     }while(true);
   }
-  expect(')');expect(':');const returnWidth=width();expect('{');expect('return');
+  expect(')');
+  if(!returnFirst){
+    // Name-first `fnc add(...) -> u8` and `fnc add(...): u8 ->`
+    // share the same immutable AST and bounded width inference.
+    const leadingArrow=peek().value==='->';
+    if(leadingArrow)take();else expect(':');
+    if(peek().value==='infer'){take();inferredReturn=true;}
+    else returnWidth=width();
+    if(!leadingArrow && peek().value==='->')take();
+  }
+  const braced=peek().value==='{';
+  if(braced)take();
+  else if(returnFirst&&peek().value==='begin')take();
+  else if(!returnFirst)expect('{');
+  if(peek().value==='^')take();else expect('return');
   const symbols=new Map(params.map(p=>[p.name,p.width]));
   function primary(depth){
     if(depth>MAX_DEPTH)fail('HDL_DEPTH',peek(),'expression nesting limit');
     if(peek().value==='('){take();const e=expression(depth+1);expect(')');return e;}
+    if(peek().value==='^')
+      fail('HDL_REMOVED_OPERATOR',peek(),'single caret is statement return, not an expression operator; use ^^ for bitwise XOR');
+    if(peek().value==='Integer' && ts[i+1]?.value==='.') {
+      const where=take();take();const member=take();
+      if(member.value!=='bitXor')
+        fail('HDL_INTRINSIC',member,'only Integer.bitXor is supported by this HDL subset');
+      if(symbols.has('Integer'))
+        fail('HDL_INTRINSIC_SHADOW',where,'Integer intrinsic conflicts with an input named Integer');
+      expect('(');const a=expression(depth+1);expect(',');const b=expression(depth+1);expect(')');
+      if(a.width!==b.width)fail('HDL_MISMATCH',member,'Integer.bitXor requires equal unsigned bit widths');
+      if(++expressionNodes>MAX_EXPR_NODES)fail('HDL_EXPR_LIMIT',member,'expression too complex');
+      return {kind:'binary',op:'^',left:a,right:b,width:a.width};
+    }
     const t=take(),bits=symbols.get(t.value);
     if(bits===undefined)fail('HDL_UNBOUND',t,'undeclared or unsupported expression '+t.value);
     return {kind:'input',name:t.value,width:bits};
@@ -226,21 +342,32 @@ export function parseHardwareSource(source) {
       const op=take(),b=next(depth);
       if(a.width!==b.width)fail('HDL_MISMATCH',op,'mixed widths require explicit cast (not implemented)');
       if(++expressionNodes>MAX_EXPR_NODES)fail('HDL_EXPR_LIMIT',op,'expression too complex');
-      a={kind:'binary',op:op.value,left:a,right:b,width:a.width};
+      a={kind:'binary',op:op.value==='^^'?'^':op.value,left:a,right:b,width:a.width};
     }
     return a;
   }
   const additive=(depth)=>binaryLayer(primary,['+','-'],depth);
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
-  const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
-  const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
-  const expr=expression();expect(';');expect('}');
+  const bitXor=(depth)=>binaryLayer(bitAnd,['^^'],depth);
+  const expression=(depth=0)=>{
+    const a=binaryLayer(bitXor,['|'],depth);
+    if(peek().value==='^')fail('HDL_REMOVED_OPERATOR',peek(),
+      'single caret is statement return, not an expression operator; use ^^ for bitwise XOR');
+    return a;
+  };
+  const expr=expression();expect(';');expect(braced?'}':'end');
+  if(!braced && (peek().value===';' || peek().value==='.'))take();
+  while(peek().value==='export')fileExport();
   if(peek().value==='use'||peek().value==='namespace')
     fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
       peek(),'late or duplicate namespace header');
   expect('<eof>');
+  if([...fileExports].some(exported=>exported!==name))
+    fail('HDL_EXPORT_UNBOUND',{offset:0},'export target must be the compiled fnc');
+  if(inferredReturn) returnWidth=expr.width;
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
+  enforceStructuralExpressionDepth(expr);
   return admitProgram({name,params,returnWidth,expression:expr});
 }
 function renderExpr(e){
