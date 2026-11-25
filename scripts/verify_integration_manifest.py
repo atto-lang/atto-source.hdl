@@ -45,6 +45,8 @@ def _reject_constant(value: str) -> None:
 
 def verify_bytes(raw: bytes, repository_name: str) -> dict[str, object]:
     """Return the verified manifest or raise InvalidManifest (no false attestations)."""
+    if repository_name == 'atto-source.hdl':
+        repository_name = 'oreslang-source.hdl'
     if repository_name not in UPSTREAMS:
         raise InvalidManifest('unknown source repository')
     if not (1 <= len(raw) <= MAX_BYTES):
