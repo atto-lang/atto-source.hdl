@@ -20,7 +20,7 @@ test('HDL only stages explicit pure scalar Atto source; no dynamic guest claims'
 });
 test('scalar counter/gauge/histogram reference never overflows', () => {
   const add = ({current,additional,ceiling}) =>
-    current < 0 || additional < 0 || ceiling < 0 || current > ceiling ||
+    current < 0 || additional < 0 || ceiling < 0 || ceiling > 2147483647 || current > ceiling ||
       additional > ceiling - current ? -1 : current + additional;
   for (const x of v.counter_add) assert.equal(add(x),x.result);
   for (const x of v.gauge_set) assert.equal(
@@ -41,4 +41,11 @@ test('canonical scalar varuint31 lengths and signed zigzag31 endpoints', () => {
   const zigzag = n => n < -1073741824 || n > 1073741823 ? -1 :
     n < 0 ? (-n-1)*2+1 : n*2;
   for (const x of v.zigzag31) assert.equal(zigzag(x.value),x.result);
+});
+
+test('counter ceiling above the signed-31 policy range is rejected by the reference',()=>{
+ const bounded=(current,additional,ceiling)=>current<0||additional<0||ceiling<0||ceiling>2147483647||current>ceiling||additional>ceiling-current?-1:current+additional;
+ assert.equal(bounded(0,0,2147483648),-1);
+ assert.equal(bounded(2147483647,0,2147483647),2147483647);
+ assert.equal(bounded(2147483647,1,2147483647),-1);
 });

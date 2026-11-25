@@ -38,7 +38,7 @@ Until independently executed, all HDL feature statuses remain
 
 ## Core loan-safety preflight and compiler borrow boundary
 
-- `core/borrow_admission.atto` is a bounded unique-owner loan-state
+- `stdlib/core/borrow_admission.atto` is a bounded unique-owner loan-state
   **diagnostic/runtime preflight** with a 65,535-reader quota, not the
   compiler borrow checker and not an owner/borrow capability.
 - `contracts/core-borrow-preflight-v1.json` pins 13 scalar truth-table
