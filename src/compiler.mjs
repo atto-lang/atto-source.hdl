@@ -142,6 +142,25 @@ export function lex(source) {
     // freestanding libraries or emit a partial hardware artifact.
     if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
       'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
+    // Refuse unsupported task and actor forms before typed generic punctuation
+    // can obscure the diagnostic. Keep the existing actor-memory and pubsub
+    // categories, and do not reserve longer names or comment text.
+    if(value==='sync'||value==='await')
+      fail('HDL_TASK_UNSUPPORTED',{offset:m.index},
+        'sync/await task requires caller identity and TaskScope; no RTL lowering');
+    const declaration=tokens.at(-1)?.value==='define' ||
+      (tokens.at(-1)?.value==='pub' && tokens.at(-2)?.value==='define');
+    if(declaration && value==='actor')
+      fail('HDL_ACTOR_MEMORY_UNSUPPORTED',{offset:m.index},
+        'nominal actor declarations require Ref32 and lifecycle lowering; no RTL fallback');
+    const nextPunctuation=/\s*([(<])/y;
+    nextPunctuation.lastIndex=m.index+value.length;
+    const next=nextPunctuation.exec(masked)?.[1];
+    if((declaration && value==='supervisor') || value==='spawn' ||
+       (['receive','ActorGroup','Topic','Subscription'].includes(value) && next==='(') ||
+       (['ActorMail','ActorGroup','Topic','Subscription'].includes(value) && next==='<'))
+      fail('HDL_ACTOR_UNSUPPORTED',{offset:m.index},
+        'actor, supervisor and typed group/topic lifecycle require a target runtime; no RTL lowering');
     if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // Canonical exceptional control has no synthesizable typed effect path.
     if(['trap','throw','raise','panic'].includes(value) &&
