@@ -11,10 +11,13 @@ test('RTL backend rejects actor subscriptions and channel operations, not preten
     'fnc f(u8 a):u8 { return nb writech a, 1; }',
     'fnc f(u8 a):u8 { return a |> map; }',
     'fnc f(u8 a):u8 { return rt take a; }',
+    'fnc f(u8 a):u8 { return take!a; }',
     'fnc f(u8 a):u8 { return Channel.new(a); }'
   ];
-  for(const code of source)
+  for(const code of source) {
     assert.throws(()=>parseHardwareSource(code),HardwareSourceError,code);
+    assert.throws(()=>compileSource(code),HardwareSourceError,code);
+  }
 });
 
 test('hardware-scoped fixed-width pure expression still compiles',()=>{
