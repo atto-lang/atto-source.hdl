@@ -24,3 +24,8 @@ test('HDL lexical denial does not reject inert comments about actor borrows', ()
   const out=compileSource(source);
   assert.match(out.systemVerilog, /module /);
 });
+
+test('canonical return-first source cannot bypass the ownership gate',()=>{
+  const input='u8 <- f(u8 a){return borrow! mut a;}';
+  assert.throws(()=>compileSource(input), e=>e?.code==='HDL_OWNERSHIP_UNSUPPORTED');
+});

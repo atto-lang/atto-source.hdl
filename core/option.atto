@@ -1,0 +1,23 @@
+// HDL source-level Option<int> reference contract (NOT synthesized yet).
+// Proposed packed ADT ABI: a valid tag + signed int payload; None has no
+// observable payload. No heap, process, dynamic allocation or host interop.
+define module option as
+  pub fnc from_flag(bool valid, int payload): Option<int> {
+    if valid; do return Some(payload); fi
+    return None;
+  }
+
+  pub fnc unwrap_or(Option<int> input, int fallback): int {
+    return match input over
+      on Some(payload) -> payload,
+      on None -> fallback,
+    end;
+  }
+
+  pub fnc map_add(Option<int> input, int delta): Option<int> {
+    return match input over
+      on Some(payload) -> Some(payload + delta),
+      on None -> None,
+    end;
+  }
+end
