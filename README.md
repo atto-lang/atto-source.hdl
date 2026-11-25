@@ -24,6 +24,8 @@ This repository is the AttoLang ecosystem home for:
 
 AttoLang is designed around actors, explicit ownership, and portable concurrency semantics. Backend-specific optimizations must not silently change the shared language contract. Runtime capabilities, target restrictions, and unsupported features should be documented explicitly.
 
+**Canonical runtime terminology:** [TenantVM](docs/TENANT_VM_NAMING_V1.md) is the per-tenant execution boundary in AttoLang generally. This HDL compiler does not implement TenantVM or actor execution; unsupported runtime constructs must continue to fail closed.
+
 ## Building and testing
 
 Consult the checked-in source tree and CI workflows for verified commands and supported targets. Add target-specific build instructions and exact-head execution results as they become available; do not treat a passing host-unit test as proof of guest-language conformance.
