@@ -53,3 +53,5 @@ runner steps, positive/negative compiled guest fixtures, disabled-path
 allocation/clock evidence, overflow/ownership tests and a linked program-
 specific strict AOT artifact (or closed Wasm module). Use the shared
 versioned contract but keep library source independently maintained.
+
+The pure core policy also has a bounded BigInt source-model differential test. This is not a guest compiler test or hardware timing evidence.
