@@ -1,0 +1,25 @@
+// HDL-local synthesizable scalar metric-policy candidate; no heap or actors.
+// NOT_EXECUTED: no RTL generation or simulation is claimed.
+define module metrics_scalar as
+  pub fnc bounded_counter_add(int current, int additional, int ceiling): int {
+    if current < 0 || additional < 0 || ceiling < 0 || ceiling > 2147483647; do
+      return -1;
+    fi
+    if current > ceiling || additional > ceiling - current; do return -1; fi
+    return current + additional;
+  }
+
+  pub fnc bounded_gauge_set(int requested, int lower, int upper): bool {
+    if lower > upper; do return false; fi
+    return requested >= lower && requested <= upper;
+  }
+
+  // Same inclusive 2-bound/3-bucket policy as the portable reference.
+  // Invalid bounds/sample return -1 rather than allocating a histogram.
+  pub fnc histogram_bucket(int sample, int bound0, int bound1): int {
+    if sample < 0 || bound0 < 0 || bound1 <= bound0; do return -1; fi
+    if sample <= bound0; do return 0; fi
+    if sample <= bound1; do return 1; fi
+    return 2;
+  }
+end

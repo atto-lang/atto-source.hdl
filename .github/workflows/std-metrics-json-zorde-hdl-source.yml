@@ -1,0 +1,42 @@
+name: Atto HDL std metrics/Zorde scalar SOURCE ONLY
+on:
+  pull_request:
+    paths:
+      - 'stdlib/std/metrics_scalar.atto'
+      - 'stdlib/std/zorde_varuint31.atto'
+      - 'contracts/std-metrics-json-zorde-hdl-subset-v1.json'
+      - 'tests/std-metrics-json-zorde-hdl-source.test.mjs'
+      - '.github/workflows/std-metrics-json-zorde-hdl-source.yml'
+      - 'contracts/core-borrow-preflight-v1.json'
+      - 'tests/core-borrow-preflight-source.test.mjs'
+      - 'stdlib/core/borrow_admission.atto'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scalar-source-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Exact immutable head checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Validate source-only scalar vectors
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git diff --quiet --exit-code
+          git diff --cached --exit-code
+          echo "HDL_SOURCE_HEAD=$EXPECTED_HEAD"
+          echo "HDL_SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')"
+          node --test tests/std-metrics-json-zorde-hdl-source.test.mjs
+          node --test tests/core-borrow-preflight-source.test.mjs
+          echo 'HDL_SCALAR_SOURCE_REFERENCE=EXECUTED'
+          echo 'HDL_RTL_SIMULATION=NOT_EXECUTED'
+      - name: Record evidence limits
+        if: always()
+        run: echo 'Pure source policy only, no native Atto compiler or synthesized RTL guest.' >> "$GITHUB_STEP_SUMMARY"

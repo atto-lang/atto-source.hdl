@@ -1,0 +1,159 @@
+{
+  "schema": "atto.stdlib.metrics-json-zorde.hdl-subset-v1",
+  "verification": "SOURCE_ONLY_NOT_EXECUTED",
+  "target": "synthesizable-pure-scalar",
+  "modules": [
+    "metrics_scalar",
+    "zorde_varuint31"
+  ],
+  "portable_contract": "atto-lang/atto-platform-conformance:contracts/std-metrics-json-zorde-nine-backend-v1.json",
+  "support_status": {
+    "metrics_counter_scalar": "NOT_EXECUTED",
+    "metrics_gauge_scalar": "NOT_EXECUTED",
+    "metrics_histogram_bucket_scalar": "NOT_EXECUTED",
+    "zorde_varuint31_length_scalar": "NOT_EXECUTED",
+    "zorde_zigzag31_scalar": "NOT_EXECUTED",
+    "json_dynamic_value_tree": "CAPABILITY_REVIEW_REQUIRED",
+    "zorde_dynamic_frames": "CAPABILITY_REVIEW_REQUIRED",
+    "metrics_dynamic_snapshots": "CAPABILITY_REVIEW_REQUIRED"
+  },
+  "scalar_reference_vectors": {
+    "counter_add": [
+      {
+        "current": 0,
+        "additional": 1,
+        "ceiling": 2,
+        "result": 1
+      },
+      {
+        "current": 1,
+        "additional": 2,
+        "ceiling": 2,
+        "result": -1
+      },
+      {
+        "current": 2,
+        "additional": 0,
+        "ceiling": 2,
+        "result": 2
+      },
+      {
+        "current": 2,
+        "additional": -1,
+        "ceiling": 2,
+        "result": -1
+      },
+      {
+        "current": 2147483647,
+        "additional": 1,
+        "ceiling": 2147483647,
+        "result": -1
+      }
+    ],
+    "gauge_set": [
+      {
+        "value": -1,
+        "minimum": -1,
+        "maximum": 3,
+        "result": true
+      },
+      {
+        "value": 4,
+        "minimum": -1,
+        "maximum": 3,
+        "result": false
+      }
+    ],
+    "histogram_bucket": [
+      {
+        "sample": 4,
+        "bound0": 5,
+        "bound1": 10,
+        "result": 0
+      },
+      {
+        "sample": 7,
+        "bound0": 5,
+        "bound1": 10,
+        "result": 1
+      },
+      {
+        "sample": 12,
+        "bound0": 5,
+        "bound1": 10,
+        "result": 2
+      },
+      {
+        "sample": -1,
+        "bound0": 5,
+        "bound1": 10,
+        "result": -1
+      }
+    ],
+    "varuint31_octets": [
+      {
+        "value": -1,
+        "result": -1
+      },
+      {
+        "value": 0,
+        "result": 1
+      },
+      {
+        "value": 127,
+        "result": 1
+      },
+      {
+        "value": 128,
+        "result": 2
+      },
+      {
+        "value": 16383,
+        "result": 2
+      },
+      {
+        "value": 16384,
+        "result": 3
+      },
+      {
+        "value": 2097152,
+        "result": 4
+      },
+      {
+        "value": 268435456,
+        "result": 5
+      },
+      {
+        "value": 2147483647,
+        "result": 5
+      }
+    ],
+    "zigzag31": [
+      {
+        "value": -1073741824,
+        "result": 2147483647
+      },
+      {
+        "value": -1,
+        "result": 1
+      },
+      {
+        "value": 0,
+        "result": 0
+      },
+      {
+        "value": 1,
+        "result": 2
+      },
+      {
+        "value": 1073741823,
+        "result": 2147483646
+      },
+      {
+        "value": -1073741825,
+        "result": -1
+      }
+    ]
+  },
+  "guest_evidence": null
+}
