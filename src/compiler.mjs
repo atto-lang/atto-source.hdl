@@ -126,7 +126,7 @@ export function lex(source) {
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   const masked=prepareHardwareSource(source);
   const tokens=[];
-  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}\[\]~&|^?]|./gy;
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|<-|->|•|[()+\-,;.:{}\[\]~&|^?]|./gy;
   for(const m of masked.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)) continue;
@@ -142,7 +142,7 @@ export function lex(source) {
     // freestanding libraries or emit a partial hardware artifact.
     if(value==='import') fail('HDL_LIBRARY_PROFILE_UNSUPPORTED',{offset:m.index},
       'Atto core/alloc/std and actor module imports require an unimplemented compiler-owned RTL resolver');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[()+\-,;:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // Canonical exceptional control has no synthesizable typed effect path.
     if(['trap','throw','raise','panic'].includes(value) &&
        source[m.index+value.length]==='!' &&
@@ -250,7 +250,24 @@ export function parseHardwareSource(source) {
   }
   while(peek().value==='export')fileExport();
   if(peek().value==='pub')take();
-  expect('fnc'); const name=ident();expect('(');
+  // Return-first type headers must not introduce a new executable language.
+  // The limited u1..u64 forms reuse the exact same admission and RTL AST.
+  const hasFnc=peek().value==='fnc';
+  if(hasFnc)take();
+  const hasReturnMarker=ts[i+1]?.value==='<-' || ts[i+1]?.value==='•';
+  let inferredReturn=hasReturnMarker && peek().value==='infer';
+  const returnFirst=hasReturnMarker &&
+    (inferredReturn || /^u(?:[1-9][0-9]*)$/.test(peek().value));
+  if(!hasFnc && !returnFirst)
+    fail('HDL_SYNTAX',peek(),'expected fnc or return-first typed header');
+  let name,returnWidth=null;
+  if(returnFirst){
+    if(inferredReturn)take(); // contextual infer is proven by the returned AST
+    else returnWidth=width();
+    take();name=ident(); // consume one contiguous <- or bullet separator
+  }
+  else name=ident();
+  expect('(');
   const params=[];
   if(peek().value!==')'){
     do{
@@ -262,7 +279,21 @@ export function parseHardwareSource(source) {
       take();
     }while(true);
   }
-  expect(')');expect(':');const returnWidth=width();expect('{');expect('return');
+  expect(')');
+  if(!returnFirst){
+    // Name-first `fnc add(...) -> u8` and `fnc add(...): u8 ->`
+    // share the same immutable AST and bounded width inference.
+    const leadingArrow=peek().value==='->';
+    if(leadingArrow)take();else expect(':');
+    if(peek().value==='infer'){take();inferredReturn=true;}
+    else returnWidth=width();
+    if(!leadingArrow && peek().value==='->')take();
+  }
+  const braced=peek().value==='{';
+  if(braced)take();
+  else if(returnFirst&&peek().value==='begin')take();
+  else if(!returnFirst)expect('{');
+  expect('return');
   const symbols=new Map(params.map(p=>[p.name,p.width]));
   function primary(depth){
     if(depth>MAX_DEPTH)fail('HDL_DEPTH',peek(),'expression nesting limit');
@@ -286,7 +317,8 @@ export function parseHardwareSource(source) {
   const bitAnd=(depth)=>binaryLayer(additive,['&'],depth);
   const bitXor=(depth)=>binaryLayer(bitAnd,['^'],depth);
   const expression=(depth=0)=>binaryLayer(bitXor,['|'],depth);
-  const expr=expression();expect(';');expect('}');
+  const expr=expression();expect(';');expect(braced?'}':'end');
+  if(!braced && (peek().value===';' || peek().value==='.'))take();
   while(peek().value==='export')fileExport();
   if(peek().value==='use'||peek().value==='namespace')
     fail(hasNamespace?'HDL_NAMESPACE_DUPLICATE':'HDL_NAMESPACE_HEADER_ORDER',
@@ -294,6 +326,7 @@ export function parseHardwareSource(source) {
   expect('<eof>');
   if([...fileExports].some(exported=>exported!==name))
     fail('HDL_EXPORT_UNBOUND',{offset:0},'export target must be the compiled fnc');
+  if(inferredReturn) returnWidth=expr.width;
   if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   enforceStructuralExpressionDepth(expr);
