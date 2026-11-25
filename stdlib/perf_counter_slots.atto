@@ -1,0 +1,21 @@
+// Hardware count admission policy. Pure combinational candidates only;
+// no implied clock domain crossing, synthesizable counter width or buffer.
+define module perf_counter_slots as
+  pub fnc valid_capacity(int capacity) -> bool {
+    return capacity >= 1 && capacity <= 65536;
+  }
+
+  pub fnc can_record(bool enabled, int occupied, int capacity) -> bool {
+    if !enabled || !valid_capacity(capacity) then
+      return false;
+    fi
+    return occupied >= 0 && occupied < capacity;
+  }
+
+  pub fnc next_dropped(int dropped, bool should_drop) -> int {
+    if !should_drop || dropped < 0 || dropped >= 2147483647 then
+      return dropped;
+    fi
+    return dropped + 1;
+  }
+end
