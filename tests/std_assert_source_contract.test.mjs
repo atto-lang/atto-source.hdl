@@ -1,5 +1,6 @@
-// hdl source-only guard; NOT an Atto compiled-guest test.
+// Source contract and actual HDL frontend denial; NOT hosted guest execution.
 import test from 'node:test';
+import {compileSource,parseHardwareSource,HardwareSourceError} from '../src/compiler.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -18,8 +19,8 @@ test('typed runtime assertions are retained as source', () => {
     'pub fnc not_equal<T: Eq>(T expected, T actual): void',
     'pub fnc fail(String message): void'
   ]) assert.ok(code.includes(signature), signature);
-  assert.equal(code.split('throw new AssertionError(').length - 1, 5);
-  for (const forbidden of ['rt fail(', 'abort(', 'panic(', 'raise(']) {
+  assert.equal(code.split('throw! new AssertionError(').length - 1, 5);
+  for (const forbidden of ['rt fail(', 'abort(', 'panic(', 'raise(', 'panic!', 'raise!', 'throw new']) {
     assert.equal(code.includes(forbidden), false, forbidden);
   }
 });
@@ -33,6 +34,7 @@ test('test assertion outcomes and integer bounds are nonthrowing', () => {
     'actual > high_inclusive'
   ]) assert.ok(code.includes(fragment), fragment);
   assert.equal(code.includes('throw new'), false);
+  assert.equal(code.includes('throw!'), false);
   assert.equal(code.includes('rt fail('), false);
 });
 
@@ -49,4 +51,20 @@ test('guest fixtures are present but not claimed as executed', () => {
   for (const member of ['assert.true(', 'assert.false(', 'assert.equal(', 'assert.not_equal(']) {
     assert.ok(pass.includes(member), member);
   }
+});
+
+test('every hosted assertion fixture fails closed at actual RTL compiler admission', () => {
+  const folder = 'tests/fixtures/std-assert-v1/';
+  const fixtures = ['pass', 'fail-unequal', 'reject-mixed-eq', 'reject-synthesis'];
+  for (const name of fixtures) {
+    const source = src(folder + name + '.atto');
+    for (const compile of [parseHardwareSource, compileSource]) {
+      assert.throws(() => compile(source),
+        e => e instanceof HardwareSourceError && e.code === 'HDL_LIBRARY_PROFILE_UNSUPPORTED', name);
+    }
+  }
+});
+test('library admission denial does not disable ordinary scalar RTL', () => {
+  const source = '// import module assert from pkg "std.assert";\nfnc add(u8 a, u8 b): u8 {return a+b;}';
+  assert.match(compileSource(source).systemVerilog, /module ores_add\(/);
 });
