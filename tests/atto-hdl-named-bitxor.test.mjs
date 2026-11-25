@@ -37,7 +37,7 @@ test('removed punctuation fails closed, including nested expressions',()=>{
   let err;
   try {compileSource(src('a ^ b'));} catch(e){err=e;}
   assert.ok(err instanceof HardwareSourceError);
-  assert.match(err.message,/Integer\.bitXor/);
+  assert.match(err.message,/use \^\^ for bitwise XOR/);
 });
 
 test('intrinsic namespace, arity, and width are explicitly checked',()=>{
@@ -51,7 +51,7 @@ test('intrinsic namespace, arity, and width are explicitly checked',()=>{
   ),rejects('HDL_MISMATCH'));
   assert.throws(()=>compileSource(
     'fnc f(u8 Integer,u8 b):u8 { return Integer.bitXor(Integer,b); }'
-  ),rejects('HDL_INTRINSIC_SHADOW'));
+  ),rejects('HDL_RESERVED'));
 });
 
 test('removed punctuation inside comments does not change admission',()=>{
