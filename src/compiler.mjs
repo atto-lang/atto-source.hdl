@@ -5,6 +5,8 @@ import {isProxy} from 'node:util/types';
 // RTL is not a hosted actor/tenant runtime.
 export const TENANT_VM_RUNTIME_SUPPORT = 'UNSUPPORTED';
 const MAX_SOURCE=128*1024, MAX_TOKENS=4096, MAX_DEPTH=64, MAX_PARAMS=16, MAX_EXPR_NODES=1024;
+const ACTOR_MODIFIERS=new Set(['pub','abstract','serial','unary','stream',
+  'http','tcp','websocket','virtual','proxy','isolated','untrusted','shared']);
 const RTL_RESERVED=new Set(['module','endmodule','input','output','wire','reg','logic','assign','always','generate','endgenerate','begin','end','result','if','else','for','while','case','function','task','parameter','localparam','integer','signed','unsigned','default','initial','final','interface','package','import','export','time','tri','wand','wor','supply0','supply1']);
 const rtlIdent=(name)=>!RTL_RESERVED.has(name.toLowerCase()) && name !== 'out_result';
 // A public, caller-mutable AST must never be treated as a validated RTL
@@ -163,13 +165,11 @@ export function lex(source) {
     // Contextual actor modifiers are not reserved as scalar identifiers.
     // A declaration ending in actor must still hit the nominal runtime gate,
     // before its generic arguments or handler syntax can obscure the cause.
-    const actorModifiers=new Set(['pub','abstract','serial','unary','stream',
-      'http','tcp','websocket','virtual','proxy','isolated','untrusted','shared']);
     let actorDeclIndex=tokens.length-1;
-    while(actorDeclIndex>=0 && actorModifiers.has(tokens[actorDeclIndex].value))
-      actorDeclIndex--;
-    const actorDeclaration=tokens[actorDeclIndex]?.value==='define';
-    if(actorDeclaration && value==='actor')
+    if(value==='actor')
+      while(actorDeclIndex>=0 && ACTOR_MODIFIERS.has(tokens[actorDeclIndex].value))
+        actorDeclIndex--;
+    if(value==='actor' && tokens[actorDeclIndex]?.value==='define')
       fail('HDL_ACTOR_MEMORY_UNSUPPORTED',{offset:m.index},
         'nominal actor declarations require Ref32 and lifecycle lowering; no RTL fallback');
     const nextPunctuation=/\s*([(<])/y;
