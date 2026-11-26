@@ -495,6 +495,10 @@ export function compileNamespaceProvider(source,namespace,symbol){
 // This is not the ordinary unsigned HDL source profile or actor panic ABI.
 const SIGNED_MAX=(1n<<63n)-1n,SIGNED_MIN=-(1n<<63n);
 export function compileCheckedNamespaceProvider(source,namespace,symbol,arity=0,modulePrefix='provider'){
+  const program=admitCheckedNamespaceProvider(source,namespace,symbol,arity,modulePrefix);
+  return {program,systemVerilog:emitSystemVerilog(program)};
+}
+export function admitCheckedNamespaceProvider(source,namespace,symbol,arity=0,modulePrefix='provider'){
   const deny=(code,detail)=>fail(code,{offset:0},detail);
   const id=/^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
   if(typeof source!=='string'||source.length>4096||Buffer.byteLength(source)>4096||!source.isWellFormed()||source.includes('\0'))
@@ -550,7 +554,7 @@ export function compileCheckedNamespaceProvider(source,namespace,symbol,arity=0,
   if(at!==tokens.length)deny('E_NAMESPACE_PROFILE','trailing expression tokens');
   enforceStructuralExpressionDepth(expression);
   const program=admitProgram({name:modulePrefix+'_'+symbol,params,returnWidth:64,expression,checkedSigned:true});
-  return {program,systemVerilog:emitSystemVerilog(program)};
+  return program;
 }
 function emitCheckedSigned(p){
   const ports=p.params.map(x=>'    input logic signed [63:0] in_'+x.name);
