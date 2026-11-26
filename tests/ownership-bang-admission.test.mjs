@@ -17,7 +17,7 @@ const expectedOwnershipDiagnostic = expression => /!!?(?![ \t\r\n\v\f])/.test(ex
 
 test('HDL never emits RTL for unsupported copy/take/borrow/share', () => {
   for (const expression of [
-    'copy!item', 'copy!!item', 'take!item', 'borrow!item', 'borrow! item',
+    'copy!item', 'copy!!item', 'take!item', 'move!item', 'move! item', 'borrow!item', 'borrow! item',
     'borrow!mut item', 'borrow! mut item',
     'mut borrow!item', 'mut borrow! item', 'share!item',
     'borrow!\nmut item', 'borrow!/* checked loan */mut item',
@@ -62,7 +62,7 @@ test('the CLI emits RTL only for supported source', () => {
   const cli=fileURLToPath(new URL('../bin/oreslang-hdl.mjs',import.meta.url));
   const input=join(dir,'main.atto'),output=join(dir,'main.sv');
   try {
-    for(const expression of ['take!item','borrow! mut item','share!item','copy!item','copy!!item']){
+    for(const expression of ['take!item','move!item','move! item','borrow! mut item','share!item','copy!item','copy!!item']){
       writeFileSync(input,source(expression));
       const result=spawnSync(process.execPath,[cli,input,output],{encoding:'utf8',timeout:10000});
       assert.ifError(result.error);
