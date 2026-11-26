@@ -10,10 +10,10 @@ export function isClosedQuantityProfile(masked){
  return /^\s*(?:define\s+(?:dimension|unit)\b|(?:declare\s+)?type\b|(?:pub\s+)?fnc\s+main\s*\(\s*\)\s*(?:->|:)\s*int\b)/.test(masked);
 }
 export function foldClosedQuantity(masked,fail,original=masked,{strict=false}={}){
- const tokens=[];const re=/\s+|trap!(?=[ \t\r\n\v\f])|\|>|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.,:;{}@-]|./gy;
+ const tokens=[];const re=/\s+|trap!(?=[ \t\r\n\v\f])|\|>|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()\[\]+*\/<>=.,:;{}@-]|./gy;
  for(const m of masked.matchAll(re)){
   if(/^\s+$/.test(m[0]))continue;
-  if(!/^(?:trap!|\|>|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.,:;{}@-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
+  if(!/^(?:trap!|\|>|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()\[\]+*\/<>=.,:;{}@-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
   if(m[0]==='trap!'&&!/[ \t\r\n\v\f]/.test(original[m.index+5]??''))
    fail('E_BANG_KEYWORD_WHITESPACE',{offset:m.index},'ASCII whitespace required after trap!');
   tokens.push({value:m[0],offset:m.index});if(tokens.length>4096)fail('HDL_TOKEN_LIMIT',tokens.at(-1),'quantity tokens');
@@ -32,7 +32,7 @@ export function foldClosedQuantity(masked,fail,original=masked,{strict=false}={}
  const norm=(n,d)=>{const g=gcd(n,d);n/=g;d/=g;if(n>LIMIT||d>LIMIT)err('E_UNIT_LIMIT','scale exceeds 256 bits');return [n,d];};
  const mulScale=(a,b)=>norm(a[0]*b[0],a[1]*b[1]);
  const factor=()=>{if(!/^\d/.test(peek().value))err('E_UNIT_SCALE','positive factor required');const n=integer();if(n<=0n)err('E_UNIT_SCALE','positive factor required');return n;};
- const dims=new Map(),units=new Map(),refinements=new Map(),bindings=new Map(),nodes=[];
+ const dims=new Map(),units=new Map(),refinements=new Map(),bindings=new Map(),arrays=new Map(),nodes=[];
  const known=n=>dims.has(n)||units.has(n)||refinements.has(n);
  const unit=n=>{if(!units.has(n))err('E_UNIT_NAME','unknown unit');return units.get(n);};
  while(eat('define')){
@@ -195,6 +195,13 @@ export function foldClosedQuantity(masked,fail,original=masked,{strict=false}={}
    if(!helper.admitted(arg))err('E_REFINEMENT_PRECONDITION','closed helper argument violates contract');
    return postfix(node('/',[node('literal',[helper.numerator]),node('literal',[arg])]),false);
   }
+  if(strict&&arrays.has(peek().value)){
+   const cells=arrays.get(take().value);
+   if(!eat('['))err('E_VERIFY_UNSUPPORTED','fixed array receiver may not escape');
+   const index=expr(0,depth+1);expect(']');
+   if(!plain(index))err('E_UNIT_ERASURE','fixed array index must be scalar');
+   return postfix(node('index',[index,...cells]),false);
+  }
   if(strict&&bindings.has(peek().value)){
    const v=bindings.get(take().value);
    // A fresh copy prevents a later unit attachment mutating the captured node.
@@ -227,16 +234,28 @@ export function foldClosedQuantity(masked,fail,original=masked,{strict=false}={}
  let result;
  if(strict){
   while(eat('val')){
-   if(bindings.size>=32)err('HDL_EXPR_LIMIT','strict binding count');
+   if(bindings.size+arrays.size>=32)err('HDL_EXPR_LIMIT','strict binding count');
    let name=ident(),type=null;
    if(eat(':'))type=ident();
    else if(peek().value!=='='&&peek().value!==';'){type=name;name=ident();}
-   if(!/^[a-z_][A-Za-z_0-9]*$/.test(name)||known(name)||bindings.has(name)||helper?.name===name||
+   if(!/^[a-z_][A-Za-z_0-9]*$/.test(name)||known(name)||bindings.has(name)||arrays.has(name)||helper?.name===name||
       ['val','let','main','fnc','pub','return','as','int','i64','type','while','if','else','break','continue','begin','end'].includes(name))
     err('E_VERIFY_UNSUPPORTED','invalid or duplicate strict binding');
    if(peek().value===';')err('E_MISSING_INITIALIZER','strict binding requires initializer');
    if(type&&type!=='int'&&type!=='i64'&&!refinements.has(type))err('E_VERIFY_UNSUPPORTED','only scalar binding types');
-   expect('=');let v=expr(0,0);expect(';');
+   expect('=');
+   if(eat('Array')){
+    if(type||known('Array')||helper?.name==='Array')err('E_VERIFY_UNSUPPORTED','fixed array requires inferred unshadowed immutable binding');
+    expect('.');expect('of');expect('(');const cells=[];
+    do{
+     if(cells.length>=16)err('HDL_EXPR_LIMIT','fixed array cells');
+     const cell=expr(0,0);
+     if(!plain(cell))err('E_UNIT_ERASURE','fixed array cells must be scalar');
+     cells.push(node('copy',[cell]));
+    }while(eat(','));
+    expect(')');expect(';');arrays.set(name,Object.freeze(cells));continue;
+   }
+   let v=expr(0,0);expect(';');
    if(!plain(v))err('E_UNIT_ERASURE','strict binding must be scalar');
    if(refinements.has(type))v=node('refine',[v,...refinements.get(type)]);
    bindings.set(name,node('copy',[v]));
@@ -266,7 +285,12 @@ export function foldClosedQuantity(masked,fail,original=masked,{strict=false}={}
  // source order. No artifact may be emitted for a statically known trap.
  const values=[];
  for(const n of nodes){
-  const [a,b,z]=n.args.map(x=>typeof x==='object'?values[x.index]:x);
+  const args=n.args.map(x=>typeof x==='object'?values[x.index]:x);
+  const [a,b,z]=args;
+  if(n.op==='index'){
+   if(a<0n||a>=BigInt(args.length-1))fail('E_VERIFY_UNPROVEN',{offset:0},'fixed array index outside receiver bounds');
+   values.push(args[Number(a)+1]);continue;
+  }
   if(n.op==='refine'&&(a<b||a>z))fail('E_VERIFY_UNPROVEN',{offset:0},'closed refinement may fail');
   if(n.op==='/'&&b===0n)fail(strict?'E_VERIFY_UNPROVEN':'HDL_STATIC_ARITHMETIC',{offset:0},'divisionByZero');
   const v=n.op==='literal'||n.op==='copy'||n.op==='refine'?a:n.op==='neg'?-a:n.op==='+'?a+b:n.op==='-'?a-b:n.op==='*'?a*b:a/b;
