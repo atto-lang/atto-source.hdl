@@ -126,7 +126,7 @@ export function lex(source) {
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
   const masked=prepareHardwareSource(source);
   const tokens=[];
-  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?]|./gy;
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?]|./gy;
   for(const m of masked.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)) continue;
@@ -162,7 +162,7 @@ export function lex(source) {
       fail('HDL_ACTOR_UNSUPPORTED',{offset:m.index},
         'actor, supervisor and typed group/topic lifecycle require a target runtime; no RTL lowering');
     if(value==='%') fail('HDL_REMOVED_OPERATOR',{offset:m.index},'use an explicit typed remainder/modulus operation; no RTL lowering');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // Canonical exceptional control has no synthesizable typed effect path.
     if(['trap','throw','raise','panic'].includes(value) &&
        source[m.index+value.length]==='!' &&
@@ -331,7 +331,20 @@ export function parseHardwareSource(source) {
       if(++expressionNodes>MAX_EXPR_NODES)fail('HDL_EXPR_LIMIT',member,'expression too complex');
       return {kind:'binary',op:'^',left:a,right:b,width:a.width};
     }
-    const t=take(),bits=symbols.get(t.value);
+    const t=take();
+    // Deliberately narrow: decimal literals in explicitly sized unsigned
+    // return context. Never infer a width, truncate, or convert through Number.
+    if(/^[0-9]+$/.test(t.value)){
+      if(returnWidth===null||inferredReturn)
+        fail('HDL_LITERAL_WIDTH',t,'decimal literal requires explicit unsigned return width');
+      if(t.value.length>20||! /^(0|[1-9][0-9]*)$/.test(t.value))
+        fail('HDL_LITERAL_RANGE',t,'noncanonical or oversized decimal literal');
+      const value=BigInt(t.value);
+      if(value>=(1n<<BigInt(returnWidth)))
+        fail('HDL_LITERAL_RANGE',t,'decimal literal exceeds unsigned return width');
+      return {kind:'literal',value:t.value,width:returnWidth};
+    }
+    const bits=symbols.get(t.value);
     if(bits===undefined)fail('HDL_UNBOUND',t,'undeclared or unsupported expression '+t.value);
     return {kind:'input',name:t.value,width:bits};
   }
@@ -365,13 +378,14 @@ export function parseHardwareSource(source) {
   if([...fileExports].some(exported=>exported!==name))
     fail('HDL_EXPORT_UNBOUND',{offset:0},'export target must be the compiled fnc');
   if(inferredReturn) returnWidth=expr.width;
-  if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
+  if(!params.length&&expr.kind!=='literal')fail('HDL_PARAMS',{offset:0},'zero-input profile requires a single decimal literal');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   enforceStructuralExpressionDepth(expr);
   return admitProgram({name,params,returnWidth,expression:expr});
 }
 function renderExpr(e){
   if(e.kind==='input')return 'in_'+e.name;
+  if(e.kind==='literal')return e.width+"'d"+e.value;
   return '('+renderExpr(e.left)+' '+e.op+' '+renderExpr(e.right)+')';
 }
 export function emitSystemVerilog(p){
@@ -411,6 +425,7 @@ export function evaluateReference(program,inputs){
   const values=Object.fromEntries(program.params.map(p=>[p.name,descriptors[p.name].value]));
   function go(e){
     const mask=(1n<<BigInt(e.width))-1n;
+    if(e.kind==='literal')return BigInt(e.value);
     if(e.kind==='input'){
       const n=values[e.name];
       if(typeof n!=='bigint')throw new TypeError('non-BigInt input '+e.name);
