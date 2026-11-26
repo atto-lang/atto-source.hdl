@@ -182,6 +182,16 @@ function lexMasked(source,masked){
         (tokens.at(-2)?.value==='pub' && tokens.at(-3)?.value==='define')))
       fail('HDL_STATE_CONTAINER_UNSUPPORTED',{offset:m.index},
         'protected state containers require checked sequential storage, lease authority and lifecycle lowering; no RTL fallback');
+    // Persistent state requires a trusted durable broker; never lower a
+    // durable declaration as ordinary combinational state. Contextual words
+    // remain available as scalar identifiers outside the declaration prefix.
+    if(declaration && (value==='durable'||value==='persistent')) {
+      const actorHeader=/\s+actor(?![A-Za-z0-9_])/y;
+      actorHeader.lastIndex=m.index+value.length;
+      if(actorHeader.test(masked))
+        fail('HDL_DURABLE_ACTOR_UNSUPPORTED',{offset:m.index},
+          'durable actors require transactional storage and incarnation-fenced publication; no RTL fallback');
+    }
     if(declaration && value==='actor')
       fail('HDL_ACTOR_MEMORY_UNSUPPORTED',{offset:m.index},
         'nominal actor declarations require Ref32 and lifecycle lowering; no RTL fallback');
