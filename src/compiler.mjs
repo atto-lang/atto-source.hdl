@@ -59,6 +59,7 @@ function prepareHardwareSource(source) {
   const masked=source.split('');
   const blank=(start,end)=>masked.fill(' ',start,end);
   let previous='';
+  let syncOffset=-1;
   const isStart=c=>c!==undefined&&/[A-Za-z_]/.test(c);
   const isPart=c=>c!==undefined&&/[A-Za-z0-9_]/.test(c);
   const lineEnd=c=>c===undefined||c==='\n'||c==='\r'||c==='\u0085'||c==='\u2028'||c==='\u2029';
@@ -92,17 +93,26 @@ function prepareHardwareSource(source) {
         if(next===quote){closed=true;break;}
       }
       if(!closed)fail('HDL_TOKEN',{offset:start},'unterminated source literal');
-      previous='literal';continue;
+      previous='literal';syncOffset=-1;continue;
     }
     if(isStart(c)){
       const start=i++;
       while(i<source.length&&isPart(source[i]))i++;
-      if(previous==='.'&&source.slice(start,i)==='try_publish')
+      const word=source.slice(start,i);
+      // Detect an active sync-task header even when an earlier scalar-only
+      // token (for example a mutable initializer '=') would stop lexing.
+      // Only adjacent identifiers separated by trivia count, not literals,
+      // comments, longer names or punctuation.
+      if(word==='task'&&syncOffset>=0)
+        fail('HDL_TASK_UNSUPPORTED',{offset:syncOffset},
+          'sync task requires caller identity and TaskScope; no RTL lowering');
+      syncOffset=word==='sync'?start:-1;
+      if(previous==='.'&&word==='try_publish')
         fail('HDL_ACTOR_PUBSUB_UNSUPPORTED',{offset:start},
           'Topic.try_publish needs checked actor authority, share! and typed Result receipt lowering; not supported by RTL');
       previous='id';continue;
     }
-    previous=c==='.'?'.':'other';i++;
+    previous=c==='.'?'.':'other';syncOffset=-1;i++;
   }
   return masked.join('');
 }
