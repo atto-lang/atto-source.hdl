@@ -36,7 +36,7 @@ export function compileBooleanReduction(source){
  if(peek()!==')')do{
   if(params.size>=16)limit('parameters');expect('bool');const name=peek();
   // Bound the identifier grammar; generated ports never contain source names.
-  if(!/^[a-z_][a-z_0-9]*$/.test(name??'')||['true','false','bool','fnc','pub','gate','return','if','then','fi','val','let','int','void','actor','spawn','await','sync','select','import','new','self','and','or','xor','not','rt','copy','take','borrow','share','drop','pin','move','trap','throw','raise','panic','defer','recover'].includes(name)||params.has(name))fail('invalid Bool parameter');
+  if(!/^[a-z_][a-z_0-9]*$/.test(name??'')||['cpu','gpu','quantum','true','false','bool','fnc','pub','gate','return','if','then','fi','val','let','int','void','actor','spawn','await','sync','select','import','new','self','and','or','xor','not','rt','copy','take','borrow','share','drop','pin','move','trap','throw','raise','panic','defer','recover'].includes(name)||params.has(name))fail('invalid Bool parameter');
   at++;params.set(name,'in_'+params.size);
  }while(eat(','));
  expect(')');if(!eat(':'))expect('->');expect('bool');expect('{');expect('return');const value=expr(0);expect(';');expect('}');if(at!==ts.length)fail('trailing source');
