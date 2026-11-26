@@ -132,7 +132,7 @@ export function lex(source) {
     if(/^\s+$/.test(value)) continue;
     // Keyword bangs need ASCII whitespace after the complete suffix.
     const at=m.index+value.length;
-    if(['trap','throw','raise','panic','copy','take','borrow','share','pin','drop','pipe','rpipe','stop','expand'].includes(value) &&
+    if(['trap','throw','raise','panic','copy','take','move','borrow','share','pin','drop','pipe','rpipe','stop','expand'].includes(value) &&
        source[at]==='!' && source[at+1]!=='=' &&
        !/^!eq(?![A-Za-z0-9_])/.test(source.slice(at))) {
       const after=at+(value==='copy' && source[at+1]==='!' ? 2 : 1);
@@ -140,7 +140,7 @@ export function lex(source) {
         fail('E_BANG_KEYWORD_WHITESPACE',{offset:m.index},'whitespace required after bang keyword');
     }
 
-    if(['copy','take','borrow','share'].includes(value) &&
+    if(['copy','take','move','borrow','share'].includes(value) &&
        source[m.index+value.length]==='!' &&
        source[m.index+value.length+1]!=='=' &&
        !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
