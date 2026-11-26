@@ -11,13 +11,16 @@ const source = expression => 'pub fnc main(u8 item): u8 { return '+expression+';
 
 // Compact spellings fail syntax admission; valid spaced ownership remains
 // explicitly unsupported by the hardware profile.
-const expectedOwnershipDiagnostic = expression => /!!?(?![ \t\r\n\v\f])/.test(expression)
-  && !/!![ \t\r\n\v\f]/.test(expression)
-    ? 'E_BANG_KEYWORD_WHITESPACE' : 'HDL_OWNERSHIP_UNSUPPORTED';
+const expectedOwnershipDiagnostic = expression => {
+  const suffix = /^(?:mut )?(?:copy!!|copy!|take!|move!|borrow!|share!)/.exec(expression);
+  assert.ok(suffix, 'test must start with a complete ownership keyword');
+  return /[ \t\r\n\v\f]/.test(expression[suffix[0].length] ?? '')
+    ? 'HDL_OWNERSHIP_UNSUPPORTED' : 'E_BANG_KEYWORD_WHITESPACE';
+};
 
 test('HDL never emits RTL for unsupported copy/take/borrow/share', () => {
   for (const expression of [
-    'copy!item', 'copy!!item', 'take!item', 'move!item', 'move! item', 'borrow!item', 'borrow! item',
+    'copy!item', 'copy!!item', 'copy!! item', 'copy!!\titem', 'take!item', 'move!item', 'move! item', 'borrow!item', 'borrow! item',
     'borrow!mut item', 'borrow! mut item',
     'mut borrow!item', 'mut borrow! item', 'share!item',
     'borrow!\nmut item', 'borrow!/* checked loan */mut item',
@@ -62,7 +65,7 @@ test('the CLI emits RTL only for supported source', () => {
   const cli=fileURLToPath(new URL('../bin/oreslang-hdl.mjs',import.meta.url));
   const input=join(dir,'main.atto'),output=join(dir,'main.sv');
   try {
-    for(const expression of ['take!item','move!item','move! item','borrow! mut item','share!item','copy!item','copy!!item']){
+    for(const expression of ['take!item','move!item','move! item','borrow! mut item','share!item','copy!item','copy!!item','copy!! item']){
       writeFileSync(input,source(expression));
       const result=spawnSync(process.execPath,[cli,input,output],{encoding:'utf8',timeout:10000});
       assert.ifError(result.error);
