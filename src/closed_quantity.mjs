@@ -9,7 +9,7 @@ function gcd(a,b){while(b){const r=a%b;a=b;b=r;}return a;}
 export function isClosedQuantityProfile(masked){
  return /^\s*(?:define\s+(?:dimension|unit)\b|(?:pub\s+)?fnc\s+main\s*\(\s*\)\s*(?:->|:)\s*int\b)/.test(masked);
 }
-export function foldClosedQuantity(masked,fail){
+export function foldClosedQuantity(masked,fail,{strict=false}={}){
  const tokens=[];const re=/\s+|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|[()+*\/<>=.:;{}-]|./gy;
  for(const m of masked.matchAll(re)){
   if(/^\s+$/.test(m[0]))continue;
@@ -30,7 +30,7 @@ export function foldClosedQuantity(masked,fail){
  const norm=(n,d)=>{const g=gcd(n,d);n/=g;d/=g;if(n>LIMIT||d>LIMIT)err('E_UNIT_LIMIT','scale exceeds 256 bits');return [n,d];};
  const mulScale=(a,b)=>norm(a[0]*b[0],a[1]*b[1]);
  const factor=()=>{if(!/^\d/.test(peek().value))err('E_UNIT_SCALE','positive factor required');const n=integer();if(n<=0n)err('E_UNIT_SCALE','positive factor required');return n;};
- const dims=new Map(),units=new Map(),nodes=[];
+ const dims=new Map(),units=new Map(),aliases=new Map(),nodes=[];
  const known=n=>dims.has(n)||units.has(n);
  const unit=n=>{if(!units.has(n))err('E_UNIT_NAME','unknown unit');return units.get(n);};
  while(eat('define')){
@@ -52,6 +52,18 @@ export function foldClosedQuantity(masked,fail){
   }
   expect(';');
  }
+ if(strict){
+  while(eat('type')){
+   const name=ident();if(!/^[A-Z]/.test(name)||known(name)||aliases.has(name))err('E_UNIT_DUPLICATE','duplicate or invalid refinement name');
+   if(aliases.size>=32)err('E_UNIT_LIMIT','refinement count');
+   expect('=');expect('int');expect('where');expect('self');expect('>');expect('=');
+   const lo=integer(eat('-'));expect('and');expect('self');expect('<');expect('=');const hi=integer(eat('-'));expect(';');
+   if(lo>hi)err('E_REFINEMENT_BINDING','empty refinement interval');
+   aliases.set(name,[lo,hi]);
+  }
+  if(!dims.size&&!aliases.size)err('E_VERIFY_UNSUPPORTED','strict closed scalar needs verified declarations');
+  if(peek().value!=='pub')err('E_VERIFY_UNSUPPORTED','strict HDL supports only a closed main');
+ }
  eat('pub');expect('fnc');expect('main');expect('(');expect(')');if(!eat('->'))expect(':');expect('int');expect('{');expect('return');
  function node(op,args,dim=scalar(),scale=ONE){
   if(nodes.length>=1024)err('HDL_EXPR_LIMIT','quantity nodes');
@@ -61,6 +73,10 @@ export function foldClosedQuantity(masked,fail){
  }
  const plain=n=>equal(n.dim,scalar())&&sameScale(n.scale,ONE);
  function attach(n,name,cast){
+  if(strict&&cast&&aliases.has(name)){
+   if(!plain(n))err('E_UNIT_ERASURE','scalar refinement cast erases quantity');
+   return node('refine',[n,...aliases.get(name)]);
+  }
   if(cast&&(name==='int'||name==='i64')){if(!plain(n))err('E_UNIT_ERASURE','scalar cast erases quantity');return n;}
   if(!plain(n))err('E_UNIT_ATTACHMENT','repeated unit attachment');
   const u=unit(name);n.dim=scalar();n.dim[u.d]=1;n.scale=u.scale;return n;
@@ -121,10 +137,11 @@ export function foldClosedQuantity(masked,fail){
  // source order. No artifact may be emitted for a statically known trap.
  const values=[];
  for(const n of nodes){
-  const [a,b]=n.args.map(x=>typeof x==='object'?values[x.index]:x);
-  if(n.op==='/'&&b===0n)fail('HDL_STATIC_ARITHMETIC',{offset:0},'divisionByZero');
-  const v=n.op==='literal'?a:n.op==='neg'?-a:n.op==='+'?a+b:n.op==='-'?a-b:n.op==='*'?a*b:a/b;
-  if(v<MIN||v>MAX)fail('HDL_STATIC_ARITHMETIC',{offset:0},'integerOverflow');
+  const [a,b,z]=n.args.map(x=>typeof x==='object'?values[x.index]:x);
+  if(n.op==='refine'&&(a<b||a>z))fail('E_VERIFY_UNPROVEN',{offset:0},'closed refinement cast may fail');
+  if(n.op==='/'&&b===0n)fail(strict?'E_VERIFY_UNPROVEN':'HDL_STATIC_ARITHMETIC',{offset:0},'divisionByZero');
+  const v=n.op==='literal'||n.op==='refine'?a:n.op==='neg'?-a:n.op==='+'?a+b:n.op==='-'?a-b:n.op==='*'?a*b:a/b;
+  if(v<MIN||v>MAX)fail(strict?'E_VERIFY_UNPROVEN':'HDL_STATIC_ARITHMETIC',{offset:0},'integerOverflow');
   values.push(v);
  }
  return values[result.index];

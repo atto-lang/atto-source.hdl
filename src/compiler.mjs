@@ -428,6 +428,19 @@ export function emitSystemVerilog(p){
   ports.push('    output logic '+(p.signed?'signed ':'')+'['+(p.returnWidth-1)+':0] out_result');
   return '// Generated from EXPERIMENTAL Oreslang hardware subset\n// '+(p.signed?'Closed checked quantity constant; no runtime traps':'Unsigned arithmetic wraps at output width')+'\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n    assign out_result = '+renderExpr(p.expression)+';\nendmodule\n';
 }
+// Explicit strict hardware admission. No fallback to unsigned or ordinary RTL.
+export function compileStrictSource(source){
+  const masked=validatedHardwareSource(source);
+  let value;
+  try{value=foldClosedQuantity(masked,fail,{strict:true});}
+  catch(e){
+    if(e?.code==='HDL_QUANTITY_SYNTAX'||e?.code==='HDL_QUANTITY_PROFILE')
+      fail('E_VERIFY_UNSUPPORTED',{offset:0},'strict HDL admits only a closed signed scalar return');
+    throw e;
+  }
+  const program=admitProgram({name:'main',params:[],returnWidth:64,signed:true,expression:{kind:'constant',width:64,decimal:value.toString()}});
+  return {program,systemVerilog:emitSystemVerilog(program)};
+}
 export function compileSource(source){const program=parseHardwareSource(source);return {program,systemVerilog:emitSystemVerilog(program)};}
 export function evaluateReference(program,inputs){
   requireAdmittedProgram(program);
