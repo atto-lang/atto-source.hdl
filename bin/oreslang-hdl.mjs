@@ -28,12 +28,13 @@ async function readBoundedSource(path) {
   }
 }
 import {compileSource,compileStrictSource} from '../src/compiler.mjs';
-const args=process.argv.slice(2),strict=args[0]==='--verify=strict';
-if(strict)args.shift();
-if(args.length!==2||args.some(a=>a.startsWith('--'))){console.error('Usage: node bin/oreslang-hdl.mjs [--verify=strict] INPUT.atto OUTPUT.sv (legacy .ores accepted)');process.exitCode=2;}
+import {compileBooleanReduction} from '../src/boolean_reduction.mjs';
+const args=process.argv.slice(2),strict=args[0]==='--verify=strict',bool=args[0]==='--verify=bool';
+if(strict||bool)args.shift();
+if(args.length!==2||args.some(a=>a.startsWith('--'))){console.error('Usage: node bin/oreslang-hdl.mjs [--verify=strict|--verify=bool] INPUT.atto OUTPUT.sv (legacy .ores accepted)');process.exitCode=2;}
 else try{
   const [src,out]=args;
-  const {systemVerilog}=(strict?compileStrictSource:compileSource)(await readBoundedSource(src));
+  const {systemVerilog}=(bool?compileBooleanReduction:strict?compileStrictSource:compileSource)(await readBoundedSource(src));
   await writeFile(out,systemVerilog,{flag:'wx'});
   console.log('Experimental RTL generated at '+out);
 }catch(e){console.error(e instanceof Error?e.message:'unrecognized failure');process.exitCode=1;}
