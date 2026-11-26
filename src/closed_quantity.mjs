@@ -7,13 +7,15 @@ const sameScale=(a,b)=>a[0]===b[0]&&a[1]===b[1];
 const ONE=[1n,1n];
 function gcd(a,b){while(b){const r=a%b;a=b;b=r;}return a;}
 export function isClosedQuantityProfile(masked){
- return /^\s*(?:define\s+(?:dimension|unit)\b|(?:pub\s+)?fnc\s+main\s*\(\s*\)\s*(?:->|:)\s*int\b)/.test(masked);
+ return /^\s*(?:define\s+(?:dimension|unit)\b|(?:declare\s+)?type\b|(?:pub\s+)?fnc\s+main\s*\(\s*\)\s*(?:->|:)\s*int\b)/.test(masked);
 }
-export function foldClosedQuantity(masked,fail){
- const tokens=[];const re=/\s+|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.:;{}@-]|./gy;
+export function foldClosedQuantity(masked,fail,original=masked){
+ const tokens=[];const re=/\s+|trap!(?=[ \t\r\n\v\f])|\|>|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.,:;{}@-]|./gy;
  for(const m of masked.matchAll(re)){
   if(/^\s+$/.test(m[0]))continue;
-  if(!/^(?:[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.:;{}@-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
+  if(!/^(?:trap!|\|>|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.,:;{}@-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
+  if(m[0]==='trap!'&&!/[ \t\r\n\v\f]/.test(original[m.index+5]??''))
+   fail('E_BANG_KEYWORD_WHITESPACE',{offset:m.index},'ASCII whitespace required after trap!');
   tokens.push({value:m[0],offset:m.index});if(tokens.length>4096)fail('HDL_TOKEN_LIMIT',tokens.at(-1),'quantity tokens');
  }
  tokens.push({value:'<eof>',offset:masked.length});
@@ -30,8 +32,8 @@ export function foldClosedQuantity(masked,fail){
  const norm=(n,d)=>{const g=gcd(n,d);n/=g;d/=g;if(n>LIMIT||d>LIMIT)err('E_UNIT_LIMIT','scale exceeds 256 bits');return [n,d];};
  const mulScale=(a,b)=>norm(a[0]*b[0],a[1]*b[1]);
  const factor=()=>{if(!/^\d/.test(peek().value))err('E_UNIT_SCALE','positive factor required');const n=integer();if(n<=0n)err('E_UNIT_SCALE','positive factor required');return n;};
- const dims=new Map(),units=new Map(),nodes=[];
- const known=n=>dims.has(n)||units.has(n);
+ const dims=new Map(),units=new Map(),refinements=new Map(),nodes=[];
+ const known=n=>dims.has(n)||units.has(n)||refinements.has(n);
  const unit=n=>{if(!units.has(n))err('E_UNIT_NAME','unknown unit');return units.get(n);};
  while(eat('define')){
   const dim=eat('dimension');if(!dim)expect('unit');
@@ -51,6 +53,17 @@ export function foldClosedQuantity(masked,fail){
    units.set(name,{d,scale});
   }
   expect(';');
+ }
+ // Admit unused bounded int declarations only; no active alias erasure.
+ while(peek().value==='declare'||peek().value==='type'){
+  eat('declare');expect('type');const name=ident();
+  if(known(name)||!/^[A-Z][A-Za-z0-9_]*$/.test(name)||['Option','Some','None','Result','Ok','Err','Error','String','Symbol','Array','Map','Tuple','Int','Bool','Float'].includes(name))
+   err('HDL_REFINEMENT_NAME','invalid or duplicate refinement name');
+  if(refinements.size>=32)err('HDL_EXPR_LIMIT','refinement count');
+  expect('=');expect('int');expect('where');expect('self');expect('>=');const lo=integer(eat('-'));
+  expect('and');expect('self');expect('<=');const hi=integer(eat('-'));expect(';');
+  if(lo>hi)err('HDL_REFINEMENT_EMPTY','contradictory refinement');
+  refinements.set(name,[lo,hi]);
  }
  // Restricted scalar helper profile: exactly one private int(int) division
  // helper, proven over its whole input interval before constant RTL lowering.
@@ -130,7 +143,6 @@ export function foldClosedQuantity(masked,fail){
   if(eat('::')||eat('begin'))closer='end';
   else err('HDL_QUANTITY_SYNTAX','expected callable body opener');
  }
- expect('return');
  function node(op,args,dim=scalar(),scale=ONE){
   if(nodes.length>=1024)err('HDL_EXPR_LIMIT','quantity nodes');
   const depth=1+Math.max(0,...args.filter(x=>typeof x==='object').map(x=>x.depth));
@@ -198,7 +210,29 @@ export function foldClosedQuantity(masked,fail){
   if(min===0)while(eat('as'))a=attach(a,ident(),true);
   return a;
  }
- const result=expr(0,0);if(!plain(result))err('E_UNIT_ERASURE','scalar return erases quantity');
+ // Pure, closed immutable Option<int> only. No dynamic RTL exception
+ // transport or nominal Error allocation. Require exact canonical binders
+ // for this experimental proof slice to avoid unverified name resolution.
+ let result;
+ if(eat('val')){
+  for(const n of ['Option','Some','None','Result','Ok','Err','Error'])
+   if(known(n))err('HDL_CHECKED_UNWRAP_UNSUPPORTED','shadowed prelude');
+  expect('Option');expect('<');expect('int');expect('>');expect('x');expect('=');
+  let payload=null;
+  if(eat('Some')){expect('(');payload=expr(0,0);expect(')');if(!plain(payload))err('E_UNIT_ERASURE','Option<int> cannot erase quantity');}
+  else expect('None');
+  expect(';');expect('return');const prefix=eat('match');
+  if(prefix){expect('<');expect('int');expect('>');}
+  if(!eat('trap!'))expect('trap');
+  expect('x');expect('.');expect('unwrap');expect('(');expect(')');
+  if(!prefix){expect('|>');expect('match');expect('<');expect('int');expect('>');}
+  expect('over');
+  expect('on');expect('Ok');expect('(');expect('n');expect(')');expect(':');expect('int');expect('->');expect('n');expect(',');
+  expect('on');expect('Err');expect('(');expect(')');expect(':');expect('int');expect('->');
+  const fallback=node('literal',[integer(eat('-'))]);expect(',');expect('end');
+  result=payload??fallback;
+ }else{expect('return');result=expr(0,0);}
+ if(!plain(result))err('E_UNIT_ERASURE','scalar return erases quantity');
  expect(';');expect(closer);expect('<eof>');
  // Only after static admission, evaluate checked closed arithmetic in
  // source order. No artifact may be emitted for a statically known trap.

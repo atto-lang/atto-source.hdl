@@ -39,3 +39,16 @@ error alone is not a semantic ownership-checker proof. Real synthesis
 and hardware simulator receipts, rather than Node source-contract checks,
 are required. The all-eleven conformance matrix intentionally preserves
 HDL's individual `not_executed` cells.
+
+## Closed checked unwrap proof slice (2026-11-26)
+
+A restricted immutable Option<int> constructor and exact trap/match with a
+literal Err fallback can fold to a signed constant RTL module. The pure
+Some payload is checked before the trap, preserving arithmetic failure
+admission. Dynamic tags, nominal Error objects, observable Err payloads,
+general Result, runtime exception control and actual synthesis remain
+unsupported. Local exact compiler folding module blob
+8cb36079d9ac10a51699c530c7a35bcc6b36c1fa: seven positive values, fifteen
+negative cases and one existing scalar control passed in Node v22.16.0.
+Full compiler-to-RTL tests were authored, not executed; no HDL simulator
+or synthesis tool is available locally. This is not RTL execution proof.

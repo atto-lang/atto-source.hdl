@@ -279,7 +279,7 @@ function rejectHybridActorMemory(ts) {
 export function parseHardwareSource(source) {
   const masked=validatedHardwareSource(source);
   if(isClosedQuantityProfile(masked)){
-    const value=foldClosedQuantity(masked,fail);
+    const value=foldClosedQuantity(masked,fail,source);
     return admitProgram({name:'main',params:[],returnWidth:64,signed:true,expression:{kind:'constant',width:64,decimal:value.toString()}});
   }
   const ts=lexMasked(source,masked); let i=0;
