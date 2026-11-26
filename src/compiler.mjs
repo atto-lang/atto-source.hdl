@@ -464,6 +464,31 @@ export function compileStrictSource(source){
   return {program,systemVerilog:emitSystemVerilog(program)};
 }
 export function compileSource(source){const program=parseHardwareSource(source);return {program,systemVerilog:emitSystemVerilog(program)};}
+// Opt-in closed public provider profile. The host must authenticate manifest
+// and inventory before calling. Nonnegative signed-int literals are exactly
+// representable as u64 RTL; negative values and other signed operations are
+// intentionally unsupported. General HDL parser is unchanged.
+export function compileNamespaceProvider(source,namespace,symbol){
+  const deny=(code,detail)=>fail(code,{offset:0},detail);
+  if(typeof source!=='string'||source.length>4096||Buffer.byteLength(source)>4096||!source.isWellFormed()||source.includes('\0'))
+    deny('E_NAMESPACE_PROFILE','provider source budget');
+  const id=/^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+  if(typeof namespace!=='string'||typeof symbol!=='string'||!id.test(namespace)||!id.test(symbol)||!rtlIdent(symbol)||symbol==='main')
+    deny('E_NAMESPACE_PROFILE','unsupported namespace or symbol');
+  const m=/^namespace ([A-Za-z_][A-Za-z0-9_]*);\npub fnc ([A-Za-z_][A-Za-z0-9_]*)\(([^\n()]*)\): int \{ return ([^\n{};]+); \}\n$/.exec(source);
+  if(!m||m[0]!==source||m[1]!==namespace||m[2]!==symbol)
+    deny('E_NAMESPACE_PROFILE','explicit public provider required');
+  if(m[3]!=='')deny('E_NAMESPACE_ARITY','zero-argument provider required');
+  if(!/^(?:0|[1-9][0-9]{0,18})$/.test(m[4]))
+    deny('E_NAMESPACE_LITERAL','nonnegative signed-int literal required');
+  const value=BigInt(m[4]);
+  if(value>9223372036854775807n)deny('E_NAMESPACE_LITERAL','signed-int range exceeded');
+  // Use the same parser-owned immutable AST and actual SystemVerilog emitter.
+  // No new public AST construction or arbitrary RTL injection path.
+  const program=admitProgram({name:symbol,params:[],returnWidth:64,expression:{kind:'literal',width:64,value:value.toString()}});
+  return {program,systemVerilog:emitSystemVerilog(program)};
+}
+
 /** One exact source, immutable admitted AST, process-local only. Errors
  * preserve the preceding successful snapshot. */
 export class IncrementalSession {
