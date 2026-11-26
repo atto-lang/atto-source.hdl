@@ -33,7 +33,12 @@ test('mixed counted guest targets fail closed in the unsupported HDL profile',()
   for(const f of fixtures){
     const raw=readFileSync(new URL('./fixtures/select-source-v2/'+f.name+'.atto',import.meta.url));
     assert.equal(createHash('sha1').update('blob '+raw.length+'\0').update(raw).digest('hex'),f.sha);
-    for(const compile of [compileSource,parseHardwareSource])assert.throws(()=>compile(raw.toString('utf8')),f.name);
+    // Fail closed with a compiler-owned diagnostic, not an arbitrary exception.
+    // These full actor fixtures currently reach HDL_TOKEN before select lowering.
+    // HDL_SELECT_UNSUPPORTED is also valid if target admission moves earlier.
+    for(const compile of [compileSource,parseHardwareSource])
+      assert.throws(()=>compile(raw.toString('utf8')),e=>e instanceof HardwareSourceError&&
+        ['HDL_TOKEN','HDL_SELECT_UNSUPPORTED'].includes(e.code),f.name);
   }
   assert.doesNotThrow(()=>compileSource('pub fnc selection(u8 a): u8 { return a; }'));
 });
