@@ -14,19 +14,23 @@ test('bang exceptional controls are explicit backend denials before RTL',()=>{
 
 
 test('18-case spec exception-bang boundaries preserve nonexceptional HDL token identity',()=>{
-  // 6 canonical positive spellings and 12 nonexceptional collision/trivia
+  // 4 canonical spellings, 2 invalid compact spellings and 12 collision/trivia
   // vectors from atto-spec PR #146. All valid effects are intentionally
   // UNSUPPORTED in this restricted hardware language profile.
   const canonical=[
-    'trap! parse_id("42")','trap!parse_id("42")',
+    'trap! parse_id("42")',
     'throw! Error("bad")','raise! Error("bad")',
-    'panic! Error("bad")','throw!Error("bad")'
+    'panic! Error("bad")'
   ];
   for(const expr of canonical){
     const code='pub fnc main(u8 a):u8{return '+expr+';}';
     assert.throws(()=>parseHardwareSource(code),e=>
       e instanceof HardwareSourceError && e.code==='HDL_EXCEPTION_BANG_UNSUPPORTED',
       'canonical bang was not rejected at source admission: '+expr);
+  }
+  for (const expr of ['trap!parse_id("42")','throw!Error("bad")']) {
+    assert.throws(()=>parseHardwareSource('pub fnc main(u8 a):u8{return '+expr+';}'),
+      e=>e instanceof HardwareSourceError && e.code==='E_BANG_KEYWORD_WHITESPACE',expr);
   }
   const nonexceptional=[
     'trap parse_id("42")','throw Error("bad")',
