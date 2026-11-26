@@ -14,8 +14,8 @@ const config={source,owner:'example@1',unit:'main.atto',scope,master,ledgerRecor
 const execute=async code=>{
  const dir=mkdtempSync(join(tmpdir(),'atto-hdl-api-'));try{
  const rtl=join(dir,'calc.sv'),tb=join(dir,'tb.sv'),out=join(dir,'sim');
- writeFileSync(rtl,code);writeFileSync(tb,'module tb; logic [7:0] a=41,b=1; wire [7:0] result; ores_calc dut(.in_a(a),.in_b(b),.out_result(result)); initial begin #1; $display("%d",result); $finish; end endmodule');
- execFileSync('iverilog',['-g2012','-s','tb','-o',out,rtl,tb]);return BigInt(execFileSync('vvp',[out],{encoding:'utf8'}).trim());
+ writeFileSync(rtl,code);writeFileSync(tb,'module tb; logic [7:0] a=41,b=1; wire [7:0] result; ores_calc dut(.in_a(a),.in_b(b),.out_result(result)); initial begin #1; $display("RTL_RESULT=%0d",result); $finish(0); end endmodule');
+ execFileSync('iverilog',['-g2012','-s','tb','-o',out,rtl,tb]);const output=execFileSync('vvp',[out],{encoding:'utf8'});const matches=[...output.matchAll(/^RTL_RESULT=(\d+)$/gm)];assert.equal(matches.length,1,output);return BigInt(matches[0][1]);
  }finally{rmSync(dir,{recursive:true,force:true});}
 };
 test('actual compiler cold/warm persistent source-unit API and process restart',async()=>{
