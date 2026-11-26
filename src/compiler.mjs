@@ -160,7 +160,16 @@ export function lex(source) {
         'sync/await task requires caller identity and TaskScope; no RTL lowering');
     const declaration=tokens.at(-1)?.value==='define' ||
       (tokens.at(-1)?.value==='pub' && tokens.at(-2)?.value==='define');
-    if(declaration && value==='actor')
+    // Contextual actor modifiers are not reserved as scalar identifiers.
+    // A declaration ending in actor must still hit the nominal runtime gate,
+    // before its generic arguments or handler syntax can obscure the cause.
+    const actorModifiers=new Set(['pub','abstract','serial','unary','stream',
+      'http','tcp','websocket','virtual','proxy','isolated','untrusted','shared']);
+    let actorDeclIndex=tokens.length-1;
+    while(actorDeclIndex>=0 && actorModifiers.has(tokens[actorDeclIndex].value))
+      actorDeclIndex--;
+    const actorDeclaration=tokens[actorDeclIndex]?.value==='define';
+    if(actorDeclaration && value==='actor')
       fail('HDL_ACTOR_MEMORY_UNSUPPORTED',{offset:m.index},
         'nominal actor declarations require Ref32 and lifecycle lowering; no RTL fallback');
     const nextPunctuation=/\s*([(<])/y;
@@ -168,7 +177,7 @@ export function lex(source) {
     const next=nextPunctuation.exec(masked)?.[1];
     if((declaration && value==='supervisor') || value==='spawn' ||
        (['receive','ActorGroup','Topic','Subscription'].includes(value) && next==='(') ||
-       (['ActorMail','ActorGroup','Topic','Subscription'].includes(value) && next==='<'))
+       (['ActorMail','ActorGroup','Topic','Subscription','ProxyActor','VirtualActor','ActorRef'].includes(value) && next==='<'))
       fail('HDL_ACTOR_UNSUPPORTED',{offset:m.index},
         'actor, supervisor and typed group/topic lifecycle require a target runtime; no RTL lowering');
     if(value==='%') fail('HDL_REMOVED_OPERATOR',{offset:m.index},'use an explicit typed remainder/modulus operation; no RTL lowering');
