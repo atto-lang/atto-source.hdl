@@ -38,3 +38,16 @@ test('actual compiler cold/warm persistent source-unit API and process restart',
   assert.throws(()=>compileCachedScalarUnit({...opts,source:source+'\ud800'}),/E_CACHE_INPUT/);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
+
+
+// The signed closed-quantity frontend is imported by the ordinary compiler.
+// Pin the entire installation closure, including this transitive semantic input.
+import {readFileSync as readClosureFile} from 'node:fs';
+import {createHash as closureHash} from 'node:crypto';
+import {scalarCompilerClosureSha256 as closureDigest} from '../src/compile-cached-scalar-unit.node.mjs';
+test('cache installation identity includes closed quantity frontend',()=>{
+ const digest=bytes=>closureHash('sha256').update(bytes).digest('hex');
+ const files=['compiler.mjs','closed_quantity.mjs','compiler-cache-envelope.node.mjs','compiler-artifact-store.node.mjs','compile-cached-scalar-unit.node.mjs'].sort();
+ const entries=files.map(name=>[name,digest(readClosureFile(new URL('../src/'+name,import.meta.url)))]);
+ assert.equal(closureDigest(),digest(JSON.stringify(['atto-hdl-scalar-install-v1',entries])));
+});
