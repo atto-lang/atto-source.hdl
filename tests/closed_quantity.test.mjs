@@ -34,3 +34,18 @@ test('reject static denials and known traps before RTL emission',()=>{
  assert.throws(()=>parseHardwareSource(source('42')+'\u202e'),x=>x.code==='HDL_BIDI_CONTROL');
  assert.throws(()=>compileSource(source('1+'.repeat(70)+'1')),x=>x.code==='HDL_DEPTH');
 });
+
+
+test('closed main body delimiters preserve identical signed RTL and checked casts',()=>{
+ const header=pre+' pub fnc main() -> int';
+ const baseline=compileSource(header+' { return 42::<i64>; }').systemVerilog;
+ for(const body of ['\nbegin return 42::<i64>; end',' :: return 42::<i64>; end','\n:: return 42::<i64>; end']){
+  const got=compileSource(header+body);
+  assert.equal(got.systemVerilog,baseline);
+  assert.equal(evaluateReference(got.program,{}),42n);
+ }
+ for(const body of [' :: return 42; }',' :: return 42;',' :: begin return 42; end',' { return 42; end'])
+  assert.throws(()=>compileSource(header+body),e=>e.code==='HDL_QUANTITY_SYNTAX');
+ assert.throws(()=>compileSource(header+' requires 1 > 0 :: return 42; end'),e=>e.code==='HDL_QUANTITY_PROFILE');
+ assert.throws(()=>compileSource(pre+' fnc f(int x) -> int requires x > 0 :: return x; end pub fnc main() -> int { return f(42); }'),e=>e.code==='HDL_QUANTITY_PROFILE');
+});
