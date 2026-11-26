@@ -29,7 +29,7 @@ test('exact dynamic counted sources fail closed before RTL publication',()=>{
 });
 
 test('mixed counted guest targets fail closed in the unsupported HDL profile',()=>{
-  const fixtures=[{"name":"counted-mixed-future-alias","sha":"8f57de03c9fb44eb5594c99a7095f34b702a266a"},{"name":"counted-multi-channel-fair","sha":"4b9b79b9b8670f5b282d33e63b7a4b5691c2979a"},{"name":"counted-mixed-zero","sha":"458323db6019da434b97e5b966ee646411310acf"}];
+  const fixtures=[{"name":"counted-distinct-alias-projection","sha":"5baca9bb9eb4b98500cab770888a45fb60bbf10d"},{"name":"counted-mixed-future-alias","sha":"8f57de03c9fb44eb5594c99a7095f34b702a266a"},{"name":"counted-multi-channel-fair","sha":"4b9b79b9b8670f5b282d33e63b7a4b5691c2979a"},{"name":"counted-mixed-zero","sha":"458323db6019da434b97e5b966ee646411310acf"}];
   for(const f of fixtures){
     const raw=readFileSync(new URL('./fixtures/select-source-v2/'+f.name+'.atto',import.meta.url));
     assert.equal(createHash('sha1').update('blob '+raw.length+'\0').update(raw).digest('hex'),f.sha);
