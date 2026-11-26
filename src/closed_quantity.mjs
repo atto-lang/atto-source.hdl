@@ -10,10 +10,10 @@ export function isClosedQuantityProfile(masked){
  return /^\s*(?:define\s+(?:dimension|unit)\b|(?:pub\s+)?fnc\s+main\s*\(\s*\)\s*(?:->|:)\s*int\b)/.test(masked);
 }
 export function foldClosedQuantity(masked,fail){
- const tokens=[];const re=/\s+|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|[()+*\/<>=.:;{}-]|./gy;
+ const tokens=[];const re=/\s+|trap!(?=[ \t\r\n\v\f])|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|[()+*\/<>=.,:;{}-]|./gy;
  for(const m of masked.matchAll(re)){
   if(/^\s+$/.test(m[0]))continue;
-  if(!/^(?:[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|[()+*\/<>=.:;{}-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
+  if(!/^(?:trap!|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|[()+*\/<>=.,:;{}-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
   tokens.push({value:m[0],offset:m.index});if(tokens.length>4096)fail('HDL_TOKEN_LIMIT',tokens.at(-1),'quantity tokens');
  }
  tokens.push({value:'<eof>',offset:masked.length});
@@ -52,7 +52,7 @@ export function foldClosedQuantity(masked,fail){
   }
   expect(';');
  }
- eat('pub');expect('fnc');expect('main');expect('(');expect(')');if(!eat('->'))expect(':');expect('int');expect('{');expect('return');
+ eat('pub');expect('fnc');expect('main');expect('(');expect(')');if(!eat('->'))expect(':');expect('int');expect('{');
  function node(op,args,dim=scalar(),scale=ONE){
   if(nodes.length>=1024)err('HDL_EXPR_LIMIT','quantity nodes');
   const depth=1+Math.max(0,...args.filter(x=>typeof x==='object').map(x=>x.depth));
@@ -115,7 +115,26 @@ export function foldClosedQuantity(masked,fail){
   if(min===0)while(eat('as'))a=attach(a,ident(),true);
   return a;
  }
- const result=expr(0,0);if(!plain(result))err('E_UNIT_ERASURE','scalar return erases quantity');
+ // Pure, closed immutable Option<int> only. No dynamic RTL exception
+ // transport or nominal Error allocation. Require exact canonical binders
+ // for this experimental proof slice to avoid unverified name resolution.
+ let result;
+ if(eat('val')){
+  for(const n of ['Option','Some','None','Result','Ok','Err','Error'])
+   if(known(n))err('HDL_CHECKED_UNWRAP_UNSUPPORTED','shadowed prelude');
+  expect('Option');expect('<');expect('int');expect('>');expect('x');expect('=');
+  let payload=null;
+  if(eat('Some')){expect('(');payload=expr(0,0);expect(')');if(!plain(payload))err('E_UNIT_ERASURE','Option<int> cannot erase quantity');}
+  else expect('None');
+  expect(';');expect('return');expect('match');expect('<');expect('int');expect('>');
+  if(!eat('trap!'))expect('trap');
+  expect('x');expect('.');expect('unwrap');expect('(');expect(')');expect('over');
+  expect('on');expect('Ok');expect('(');expect('n');expect(')');expect(':');expect('int');expect('->');expect('n');expect(',');
+  expect('on');expect('Err');expect('(');expect(')');expect(':');expect('int');expect('->');
+  const fallback=node('literal',[integer(eat('-'))]);expect(',');expect('end');
+  result=payload??fallback;
+ }else{expect('return');result=expr(0,0);}
+ if(!plain(result))err('E_UNIT_ERASURE','scalar return erases quantity');
  expect(';');expect('}');expect('<eof>');
  // Only after static admission, evaluate checked closed arithmetic in
  // source order. No artifact may be emitted for a statically known trap.
