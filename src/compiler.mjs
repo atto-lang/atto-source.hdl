@@ -1,4 +1,5 @@
 import {isProxy} from 'node:util/types';
+import {isClosedQuantityProfile,foldClosedQuantity} from './closed_quantity.mjs';
 /** Experimental standalone Oreslang fixed-width source -> combinational SystemVerilog.
  * Not integrated with full Oreslang frontends or shared HIR/MIR. Unsupported syntax fails closed.
  */
@@ -106,7 +107,7 @@ function prepareHardwareSource(source) {
   return masked.join('');
 }
 
-export function lex(source) {
+function validatedHardwareSource(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   // Reject Trojan Source reordering controls even in comments/ignored text.
   // U+200E/200F and U+061C are directional marks; U+202A..202E and
@@ -124,7 +125,10 @@ export function lex(source) {
   const controlOffset = source.search(/[\x1b\x7f]/);
   if(controlOffset>=0)
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
-  const masked=prepareHardwareSource(source);
+  return prepareHardwareSource(source);
+}
+export function lex(source){return lexMasked(source,validatedHardwareSource(source));}
+function lexMasked(source,masked){
   const tokens=[];
   const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?]|./gy;
   for(const m of masked.matchAll(re)) {
@@ -245,7 +249,12 @@ function rejectHybridActorMemory(ts) {
 }
 
 export function parseHardwareSource(source) {
-  const ts=lex(source); let i=0;
+  const masked=validatedHardwareSource(source);
+  if(isClosedQuantityProfile(masked)){
+    const value=foldClosedQuantity(masked,fail);
+    return admitProgram({name:'main',params:[],returnWidth:64,signed:true,expression:{kind:'constant',width:64,decimal:value.toString()}});
+  }
+  const ts=lexMasked(source,masked); let i=0;
   rejectSingletonDeclarations(ts);
   rejectExecutionDomains(ts);
   rejectHybridActorMemory(ts);
@@ -382,13 +391,14 @@ export function parseHardwareSource(source) {
 }
 function renderExpr(e){
   if(e.kind==='input')return 'in_'+e.name;
+  if(e.kind==='constant')return "64'sh"+BigInt.asUintN(64,BigInt(e.decimal)).toString(16).padStart(16,'0');
   return '('+renderExpr(e.left)+' '+e.op+' '+renderExpr(e.right)+')';
 }
 export function emitSystemVerilog(p){
   requireAdmittedProgram(p);
   const ports=p.params.map(x=>'    input logic ['+(x.width-1)+':0] in_'+x.name);
-  ports.push('    output logic ['+(p.returnWidth-1)+':0] out_result');
-  return '// Generated from EXPERIMENTAL Oreslang hardware subset\n// Unsigned arithmetic wraps at output width\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n    assign out_result = '+renderExpr(p.expression)+';\nendmodule\n';
+  ports.push('    output logic '+(p.signed?'signed ':'')+'['+(p.returnWidth-1)+':0] out_result');
+  return '// Generated from EXPERIMENTAL Oreslang hardware subset\n// '+(p.signed?'Closed checked quantity constant; no runtime traps':'Unsigned arithmetic wraps at output width')+'\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n    assign out_result = '+renderExpr(p.expression)+';\nendmodule\n';
 }
 export function compileSource(source){const program=parseHardwareSource(source);return {program,systemVerilog:emitSystemVerilog(program)};}
 export function evaluateReference(program,inputs){
@@ -408,6 +418,7 @@ export function evaluateReference(program,inputs){
   const values=Object.fromEntries(program.params.map(p=>[p.name,descriptors[p.name].value]));
   function go(e){
     const mask=(1n<<BigInt(e.width))-1n;
+    if(e.kind==='constant')return BigInt(e.decimal);
     if(e.kind==='input'){
       const n=values[e.name];
       if(typeof n!=='bigint')throw new TypeError('non-BigInt input '+e.name);
