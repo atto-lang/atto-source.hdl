@@ -10,10 +10,10 @@ export function isClosedQuantityProfile(masked){
  return /^\s*(?:define\s+(?:dimension|unit)\b|(?:pub\s+)?fnc\s+main\s*\(\s*\)\s*(?:->|:)\s*int\b)/.test(masked);
 }
 export function foldClosedQuantity(masked,fail){
- const tokens=[];const re=/\s+|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|[()+*\/<>=.:;{}-]|./gy;
+ const tokens=[];const re=/\s+|[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.:;{}@-]|./gy;
  for(const m of masked.matchAll(re)){
   if(/^\s+$/.test(m[0]))continue;
-  if(!/^(?:[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|[()+*\/<>=.:;{}-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
+  if(!/^(?:[0-9][0-9_]*|[A-Za-z_][A-Za-z_0-9]*|::|->|<=|>=|!=|==|[()+*\/<>=.:;{}@-])$/.test(m[0]))fail('HDL_QUANTITY_SYNTAX',{offset:m.index},'unsupported quantity token');
   tokens.push({value:m[0],offset:m.index});if(tokens.length>4096)fail('HDL_TOKEN_LIMIT',tokens.at(-1),'quantity tokens');
  }
  tokens.push({value:'<eof>',offset:masked.length});
@@ -52,8 +52,77 @@ export function foldClosedQuantity(masked,fail){
   }
   expect(';');
  }
+ // Restricted scalar helper profile: exactly one private int(int) division
+ // helper, proven over its whole input interval before constant RTL lowering.
+ // This is not a general function, dynamic datapath, or specialization-only proof.
+ let helper=null;
+ const signed=()=>integer(eat('-'));
+ const compare=(v,op,n)=>op==='eq'||op==='=='?v===n:op==='!='?v!==n:op==='<'?v<n:op==='<='?v<=n:op==='>'?v>n:v>=n;
+ function readClause(req){
+  const name=ident(),op=take().value;
+  if(!['eq','==','!=','<','<=','>','>='].includes(op)||(!req&&op==='!='))err('HDL_QUANTITY_PROFILE','unsupported bounded contract predicate');
+  const value=signed();return {req,name,op,value};
+ }
+ function bodyCloser(contracted){
+  if(eat('{'))return '}';
+  if(eat('::'))return 'end';
+  if(peek().value==='begin'){
+   const previous=tokens[i-1],current=peek();
+   if(contracted&&!masked.slice(previous.offset+previous.value.length,current.offset).includes('\n'))
+    err('HDL_QUANTITY_SYNTAX','contracted begin must start on a later line');
+   take();return 'end';
+  }
+  err('HDL_QUANTITY_SYNTAX','expected callable body opener');
+ }
+ if(peek().value==='@'||(peek().value==='fnc'&&tokens[i+1]?.value!=='main')){
+  const clauses=[];
+  function addClause(req){
+   if(clauses.length>=16)err('HDL_QUANTITY_PROFILE','contract budget');
+   clauses.push(readClause(req));
+  }
+  while(eat('@')){
+   const req=eat('requires');if(!req&&!eat('ensures'))err('HDL_QUANTITY_PROFILE','unsupported annotation');
+   expect('(');addClause(req);expect(')');
+  }
+  expect('fnc');const name=ident();
+  if(name==='main'||['fnc','int','pub','return','requires','ensures','begin','end'].includes(name))
+   err('HDL_QUANTITY_PROFILE','private helper name required');
+  expect('(');expect('int');const param=ident();expect(')');expect('->');expect('int');
+  while(['requires','ensures'].includes(peek().value))addClause(take().value==='requires');
+  if(!clauses.some(c=>c.req))err('HDL_QUANTITY_PROFILE','bounded input proof required');
+  let lo=MIN,hi=MAX;const holes=new Set();
+  for(const c of clauses.filter(c=>c.req)){
+   if(c.name!==param)err('HDL_QUANTITY_PROFILE','precondition must name parameter');
+   const n=c.value;
+   if(c.op==='!='){
+    if(n!==0n&&n!==-1n)err('HDL_QUANTITY_PROFILE','unsupported exclusion');holes.add(n);
+   }else if(c.op==='eq'||c.op==='=='){lo=lo>n?lo:n;hi=hi<n?hi:n;}
+   else if(c.op==='>'){lo=lo>n+1n?lo:n+1n;}
+   else if(c.op==='>='){lo=lo>n?lo:n;}
+   else if(c.op==='<'){hi=hi<n-1n?hi:n-1n;}
+   else hi=hi<n?hi:n;
+  }
+  while(lo<=hi&&holes.has(lo))lo++;
+  while(lo<=hi&&holes.has(hi))hi--;
+  if(lo>hi)err('E_REFINEMENT_EMPTY','contradictory preconditions');
+  const admitted=v=>v>=lo&&v<=hi&&!holes.has(v);
+  const close=bodyCloser(true);expect('return');
+  if(!/^\d/.test(peek().value)&&peek().value!=='-')err('HDL_QUANTITY_PROFILE','only literal divided by parameter helper is admitted');
+  const numerator=signed();expect('/');if(ident()!==param)err('HDL_QUANTITY_PROFILE','divisor must be parameter');
+  expect(';');expect(close);
+  if(admitted(0n)||(numerator===MIN&&admitted(-1n)))err('E_VERIFY_UNPROVEN','division not safe for all admitted inputs');
+  // Truncating signed division is monotone on either side of zero.
+  // Endpoints and the closest admitted points to zero suffice.
+  const points=[lo,hi,-2n,-1n,1n].filter(admitted);
+  const results=points.map(v=>numerator/v);
+  for(const c of clauses.filter(c=>!c.req)){
+   if(c.name!=='result')err('HDL_QUANTITY_PROFILE','postcondition must constrain result');
+   if(!results.every(v=>compare(v,c.op,c.value)))err('E_REFINEMENT_POSTCONDITION','unproved closed helper result');
+  }
+  helper={name,numerator,admitted};
+ }
  eat('pub');expect('fnc');
- if(peek().value!=='main')err('HDL_QUANTITY_PROFILE','private helper and contract lowering is not implemented');
+ if(peek().value!=='main')err('HDL_QUANTITY_PROFILE','only one private bounded helper is supported');
  expect('main');expect('(');expect(')');if(!eat('->'))expect(':');expect('int');
  if(peek().value==='requires'||peek().value==='ensures')err('HDL_QUANTITY_PROFILE','callable contracts require verified helper lowering');
  let closer='}';
@@ -103,6 +172,11 @@ export function foldClosedQuantity(masked,fail){
    const x=atom(depth+1);return node('neg',[x],x.dim,x.scale);
   }
   if(eat('(')){const x=expr(0,depth+1);expect(')');return postfix(x,false);}
+  if(helper&&peek().value===helper.name){
+   take();expect('(');const arg=signed();expect(')');
+   if(!helper.admitted(arg))err('E_REFINEMENT_PRECONDITION','closed helper argument violates contract');
+   return postfix(node('/',[node('literal',[helper.numerator]),node('literal',[arg])]),false);
+  }
   if(!/^\d/.test(peek().value))err('HDL_QUANTITY_SYNTAX','expected closed expression');
   const t=peek(),v=integer();return postfix(node('literal',[v]),t.offset+t.value.length===peek().offset);
  }

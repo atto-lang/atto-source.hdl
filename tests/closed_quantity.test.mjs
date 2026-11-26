@@ -49,3 +49,26 @@ test('closed main body delimiters preserve identical signed RTL and checked cast
  assert.throws(()=>compileSource(header+' requires 1 > 0 :: return 42; end'),e=>e.code==='HDL_QUANTITY_PROFILE');
  assert.throws(()=>compileSource(pre+' fnc f(int x) -> int requires x > 0 :: return x; end pub fnc main() -> int { return f(42); }'),e=>e.code==='HDL_QUANTITY_PROFILE');
 });
+
+
+test('closed annotated division helper proves all admitted inputs before RTL',()=>{
+ const header='@requires(x >= 1)\n@ensures(result <= 84)\nfnc f(int x) -> int requires x <= 42';
+ const tail=' pub fnc main() -> int { return f(2); }';
+ const baseline=compileSource(source('42')).systemVerilog;
+ for(const body of [' { return 84/x; }','\nbegin return 84/x; end',' :: return 84/x; end','\n:: return 84/x; end']){
+  const p=compileSource(pre+header+body+tail);
+  assert.equal(p.systemVerilog,baseline);
+  assert.equal(evaluateReference(p.program,{}),42n);
+  assert.throws(()=>compileSource(pre+header+body+tail.replace('f(2)','f(0)')),e=>e.code==='E_REFINEMENT_PRECONDITION');
+ }
+ const dual='@requires(x != 0)\nfnc f(int x) -> int requires x != -1 :: return -9223372036854775808/x; end';
+ assert.equal(evaluateReference(compileSource(pre+dual+tail).program,{}),-4611686018427387904n);
+ assert.throws(()=>compileSource(pre+dual+tail.replace('f(2)','f(-1)')),e=>e.code==='E_REFINEMENT_PRECONDITION');
+ assert.throws(()=>compileSource(pre+dual.replace('requires x != -1','')+tail),e=>e.code==='E_VERIFY_UNPROVEN');
+ assert.throws(()=>compileSource(pre+dual.replace('requires x != -1','requires x eq 0')+tail),e=>e.code==='E_REFINEMENT_EMPTY');
+ assert.throws(()=>compileSource(pre+header.replace('result <= 84','result <= 1')+' :: return 84/x; end'+tail),e=>e.code==='E_REFINEMENT_POSTCONDITION');
+ assert.throws(()=>compileSource(pre+header+' begin return 84/x; end'+tail),e=>e.code==='HDL_QUANTITY_SYNTAX');
+ assert.throws(()=>compileSource(pre+header+' :: return 84/x; }'+tail),e=>e.code==='HDL_QUANTITY_SYNTAX');
+ assert.throws(()=>compileSource(pre+header.replace('@requires(x >= 1)','@requires(x >= 1 && x <= 42)')+' :: return 84/x; end'+tail));
+ assert.throws(()=>compileSource(pre+'@requires(x >= 1) fnc f(int x) -> int :: return 84/x; end pub fnc main() -> int { return f(2); } trailing'));
+});
