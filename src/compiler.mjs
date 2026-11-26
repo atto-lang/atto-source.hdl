@@ -146,6 +146,8 @@ function lexMasked(source,masked){
   for(const m of masked.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)) continue;
+    if(value==='unsafe') fail('E_UNSAFE_UNSUPPORTED',{offset:m.index},
+      'unsafe effects and native grants are unavailable in RTL source');
     // Keyword bangs need ASCII whitespace after the complete suffix.
     const at=m.index+value.length;
     if(['trap','throw','raise','panic','copy','take','move','borrow','share','pin','drop','pipe','rpipe','stop','expand'].includes(value) &&
