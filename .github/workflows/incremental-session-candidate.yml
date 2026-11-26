@@ -4,6 +4,8 @@ on:
     paths:
       - 'src/compiler.mjs'
       - 'tests/incremental-session.test.mjs'
+      - 'tests/compiler-cache-envelope.test.mjs'
+      - 'src/compiler-cache-envelope.node.mjs'
       - '.github/workflows/incremental-session-candidate.yml'
   workflow_dispatch:
 permissions: {contents: read}
@@ -19,4 +21,4 @@ jobs:
           set -eu
           sudo apt-get update -qq
           sudo apt-get install -y iverilog
-          node --test tests/compiler.test.mjs tests/incremental-session.test.mjs
+          node --test tests/compiler.test.mjs tests/incremental-session.test.mjs tests/compiler-cache-envelope.test.mjs
