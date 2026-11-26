@@ -12,4 +12,5 @@ test('typed and counted select cannot emit a combinational RTL artifact',()=>{
 });
 test('inert nested comments and longer names preserve scalar RTL',()=>{
   assert.doesNotThrow(()=>compileSource('pub fnc selection(u8 a): u8 { /* select<int>(3) /* inner */ */ return a; }'));
+  assert.doesNotThrow(()=>compileSource('pub fnc select(u8 a): u8 { return a; }'));
 });
