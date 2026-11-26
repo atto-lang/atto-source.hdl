@@ -155,6 +155,15 @@ export function lex(source) {
     // Refuse unsupported task and actor forms before typed generic punctuation
     // can obscure the diagnostic. Keep the existing actor-memory and pubsub
     // categories, and do not reserve longer names or comment text.
+    // Counted/typed selection is a scheduler operation, not a hardware
+    // combinational mux. The comment-masked lexical suffix preserves trivia.
+    const suffix=masked.slice(m.index+value.length);
+    const selectionHeader=/^\s*(?:[({<]|(?:over|first|fair|random)(?![A-Za-z0-9_]))/;
+    const awaitedSelection=/^\s*(?:nb\s+)?select(?![A-Za-z0-9_])\s*(?:[({<]|(?:over|first|fair|random)(?![A-Za-z0-9_]))/;
+    if((value==='select' && selectionHeader.test(suffix)) ||
+       (value==='await' && awaitedSelection.test(suffix)))
+      fail('HDL_SELECT_UNSUPPORTED',{offset:m.index},
+        'typed/channel/Future select requires bounded scheduling and ownership; no combinational RTL lowering');
     if(value==='sync'||value==='await')
       fail('HDL_TASK_UNSUPPORTED',{offset:m.index},
         'sync/await task requires caller identity and TaskScope; no RTL lowering');
