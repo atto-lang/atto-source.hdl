@@ -27,3 +27,13 @@ test('comments and longer names containing domain words stay ordinary', () => {
     '// gpu { cpu { quantum } } task { }\n'
     + 'pub fnc add_gpu(u8 cpu_count, u8 b): u8 { /* nb { } */ return cpu_count + b; }'));
 });
+
+test('unsafe syntax and exact identifiers fail before RTL lowering', () => {
+  for (const source of [
+    'pub unsafe fnc main(u8 n): u8 { return n; }',
+    'pub fnc main(u8 n): u8 { unsafe { } return n; }',
+    'pub fnc unsafe(u8 n): u8 { return n; }',
+    'pub fnc main(u8 n): u8 { return n; } // inert\runsafe',
+  ]) assert.throws(() => parseHardwareSource(source), error => error.code === 'E_UNSAFE_UNSUPPORTED', source);
+  assert.doesNotThrow(() => parseHardwareSource('pub fnc unsafe_tools(u8 n): u8 { /* unsafe */ return n; }'));
+});
