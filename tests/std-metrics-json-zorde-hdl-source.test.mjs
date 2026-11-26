@@ -63,7 +63,8 @@ test('HDL scalar octet projection agrees with byte-identical portable varuint ve
     if(!Number.isSafeInteger(value)||value<0||value>2147483647||!Number.isInteger(slot)||slot<0||slot>4)return -1;
     const width=divisors.filter(n=>value>=n).length||1;
     if(slot>=width)return -1;
-    return Math.floor(value/divisors[slot])%128+(slot<width-1?128:0);
+    const digit=Math.floor(value/divisors[slot]);
+    return digit-Math.floor(digit/128)*128+(slot<width-1?128:0);
   };
   for(const {value,wire} of common.valid_varuint31){
     assert.deepEqual(wire.map((_,i)=>octet(value,i)),wire);
@@ -75,6 +76,34 @@ test('HDL scalar octet projection agrees with byte-identical portable varuint ve
     const mapped=value<0?(-value-1)*2+1:value*2;
     assert.deepEqual(wire.map((_,i)=>octet(mapped,i)),wire);
   }
+  // Independent bitwise encoder: no shared quotient or width calculation.
+  const encode=value=>{
+    let n=BigInt(value);
+    const wire=[];
+    do {
+      const low=Number(n&127n);
+      n>>=7n;
+      wire.push(low|(n===0n?0:128));
+    } while(n!==0n);
+    return wire;
+  };
+  const checkAllSlots=value=>{
+    const wire=encode(value);
+    for(let slot=-1;slot<=5;slot++)
+      assert.equal(octet(value,slot),wire[slot]??-1);
+  };
+  for(const exp of [0,1,7,14,21,28,31])
+    for(const off of [-2,-1,0,1,2]) {
+      const n=2**exp+off;
+      if(n>=0&&n<=2147483647)checkAllSlots(n);
+    }
+  let seed=0x12345678;
+  for(let i=0;i<100000;i++) {
+    seed=(Math.imul(seed,1664525)+1013904223)>>>0;
+    checkAllSlots(seed&0x7fffffff);
+  }
+  assert.doesNotMatch(zorde.replace(/\/\/[^\n]*/g,''),/%/);
+  assert.match(zorde,/digit - \(digit \/ 128\) \* 128/);
   assert.match(zorde,/pub fnc varuint31_octet_at/);
   assert.match(zorde,/slot >= width/);
   assert.equal(spec.support_status.zorde_varuint31_octet_scalar,'NOT_EXECUTED');
