@@ -5,6 +5,7 @@ on:
       - 'stdlib/std/metrics_scalar.atto'
       - 'stdlib/std/zorde_varuint31.atto'
       - 'contracts/std-metrics-json-zorde-hdl-subset-v1.json'
+      - 'contracts/std-metrics-json-zorde-source-v1.json'
       - 'tests/std-metrics-json-zorde-hdl-source.test.mjs'
       - '.github/workflows/std-metrics-json-zorde-hdl-source.yml'
       - 'contracts/core-borrow-preflight-v1.json'

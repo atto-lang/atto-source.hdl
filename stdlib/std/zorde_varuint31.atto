@@ -14,6 +14,21 @@ define module zorde_varuint31 as
     return 5;
   }
 
+  // Fixed scalar projection: no dynamically allocated byte vector.
+  // Slot is zero based; -1 means invalid value or absent octet.
+  pub fnc varuint31_octet_at(int value, int slot): int {
+    let int width = varuint31_encoded_octets(value);
+    if width < 0 || slot < 0 || slot >= width; do return -1; fi
+    let int digit = value;
+    if slot eq 1; do digit = value / 128; fi
+    if slot eq 2; do digit = value / 16384; fi
+    if slot eq 3; do digit = value / 2097152; fi
+    if slot eq 4; do digit = value / 268435456; fi
+    let int octet = digit % 128;
+    if slot < width - 1; do return octet + 128; fi
+    return octet;
+  }
+
   pub fnc zigzag31(int value): int {
     if value < -1073741824 || value > 1073741823; do return -1; fi
     if value < 0; do return (-value - 1) * 2 + 1; fi
