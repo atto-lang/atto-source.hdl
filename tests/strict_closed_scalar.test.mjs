@@ -28,3 +28,22 @@ test('strict immutable lexical captures are eager, independent and bounded',()=>
  ['val a=42; val a=1; return a;','E_VERIFY_UNSUPPORTED']
  ])assert.throws(()=>compileStrictSource(s(body)),e=>e.code===code);
 });
+
+test('fixed immutable arrays retain eager receiver-specific values',()=>{
+ const s=b=>pre+' pub fnc main() -> int { '+b+' }';
+ for(const b of [
+  'val a=Array.of(7,42); val i=1; return a[i];',
+  'val a=Array.of(40); val b=Array.of(2,9); return a[0]+b[0];',
+  'val a=Array.of(42,7); val b=a[0]; return b;'
+ ])assert.equal(evaluateReference(compileStrictSource(s(b)).program,{}),42n);
+ for(const [b,code] of [
+  ['val a=Array.of(42); return a[1];','E_VERIFY_UNPROVEN'],
+  ['val a=Array.of(42); return a[-1];','E_VERIFY_UNPROVEN'],
+  ['val a=Array.of(42,1/0); return a[0];','E_VERIFY_UNPROVEN'],
+  ['val a=Array.of(42); val b=Array.of(1,2); return a[1];','E_VERIFY_UNPROVEN'],
+  ['val a=Array.of(42); return a;','E_VERIFY_UNSUPPORTED'],
+  ['val a=Array.of(42); val b=a; return 42;','E_VERIFY_UNSUPPORTED'],
+  ['val a=Array.of(42); a[0]=0; return 42;','E_VERIFY_UNSUPPORTED'],
+  ['val a=Array.of('+Array(17).fill('1').join(',')+'); return 42;','HDL_EXPR_LIMIT']
+ ])assert.throws(()=>compileStrictSource(s(b)),e=>e.code===code);
+});
