@@ -87,7 +87,7 @@ function prepareHardwareSource(source) {
       const quote=c,start=i++;let closed=false;
       while(i<source.length){
         const next=source[i++];
-        if(next==='\'){if(i<source.length)i++;continue;}
+        if(next==='\\'){if(i<source.length)i++;continue;}
         if(next===quote){closed=true;break;}
       }
       if(!closed)fail('HDL_TOKEN',{offset:start},'unterminated source literal');
@@ -523,6 +523,13 @@ export function evaluateReference(program,inputs){
     throw new TypeError('missing input or accessor-backed input');
   const values=Object.fromEntries(program.params.map(p=>[p.name,descriptors[p.name].value]));
   if(program.checkedSigned===true){
+    // Validate every declared input, including unused parameters, before
+    // evaluating the admitted expression. No caller object coercion.
+    for(const p of program.params){
+      const value=values[p.name];
+      if(typeof value!=='bigint')throw new TypeError('non-BigInt input '+p.name);
+      if(value<SIGNED_MIN||value>SIGNED_MAX)throw new RangeError('out of range input '+p.name);
+    }
     function checked(e){
       let v;
       if(e.kind==='constant')v=e.value;
