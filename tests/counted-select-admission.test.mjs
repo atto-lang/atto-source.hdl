@@ -27,3 +27,13 @@ test('exact dynamic counted sources fail closed before RTL publication',()=>{
       assert.throws(()=>compile(raw.toString('utf8')),f.name);
   }
 });
+
+test('mixed counted guest targets fail closed in the unsupported HDL profile',()=>{
+  const fixtures=[{"name":"counted-mixed-future-alias","sha":"8f57de03c9fb44eb5594c99a7095f34b702a266a"},{"name":"counted-multi-channel-fair","sha":"4b9b79b9b8670f5b282d33e63b7a4b5691c2979a"},{"name":"counted-mixed-zero","sha":"458323db6019da434b97e5b966ee646411310acf"}];
+  for(const f of fixtures){
+    const raw=readFileSync(new URL('./fixtures/select-source-v2/'+f.name+'.atto',import.meta.url));
+    assert.equal(createHash('sha1').update('blob '+raw.length+'\0').update(raw).digest('hex'),f.sha);
+    for(const compile of [compileSource,parseHardwareSource])assert.throws(()=>compile(raw.toString('utf8')),f.name);
+  }
+  assert.doesNotThrow(()=>compileSource('pub fnc selection(u8 a): u8 { return a; }'));
+});
