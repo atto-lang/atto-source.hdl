@@ -447,6 +447,7 @@ function renderExpr(e){
 }
 export function emitSystemVerilog(p){
   requireAdmittedProgram(p);
+  if(p.checkedSigned===true)return emitCheckedSigned(p);
   const ports=p.params.map(x=>'    input logic ['+(x.width-1)+':0] in_'+x.name);
   ports.push('    output logic '+(p.signed?'signed ':'')+'['+(p.returnWidth-1)+':0] out_result');
   return '// Generated from EXPERIMENTAL Oreslang hardware subset\n// '+(p.signed?'Closed checked quantity constant; no runtime traps':'Unsigned arithmetic wraps at output width')+'\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n    assign out_result = '+renderExpr(p.expression)+';\nendmodule\n';
@@ -489,6 +490,92 @@ export function compileNamespaceProvider(source,namespace,symbol){
   return {program,systemVerilog:emitSystemVerilog(program)};
 }
 
+// Separate opt-in checked signed-i64 combinational ABI. The status port
+// is mandatory: a fault suppresses the value rather than silently wrapping.
+// This is not the ordinary unsigned HDL source profile or actor panic ABI.
+const SIGNED_MAX=(1n<<63n)-1n,SIGNED_MIN=-(1n<<63n);
+export function compileCheckedNamespaceProvider(source,namespace,symbol,arity=0,modulePrefix='provider'){
+  const deny=(code,detail)=>fail(code,{offset:0},detail);
+  const id=/^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+  if(typeof source!=='string'||source.length>4096||Buffer.byteLength(source)>4096||!source.isWellFormed()||source.includes('\0'))
+    deny('E_NAMESPACE_PROFILE','provider source budget');
+  if(typeof namespace!=='string'||typeof symbol!=='string'||!id.test(namespace)||!id.test(symbol)||!rtlIdent(symbol)||symbol==='main'||!['provider','argument'].includes(modulePrefix))
+    deny('E_NAMESPACE_PROFILE','unsupported namespace or symbol');
+  const m=/^namespace ([A-Za-z_][A-Za-z0-9_]*);\npub fnc ([A-Za-z_][A-Za-z0-9_]*)\(([^\n()]*)\): int \{ return ([^\n{};]+); \}\n$/.exec(source);
+  if(!m||m[0]!==source||m[1]!==namespace||m[2]!==symbol)deny('E_NAMESPACE_PROFILE','explicit public provider required');
+  const raw=m[3]===''?[]:m[3].split(', ');
+  if(!Number.isInteger(arity)||arity!==raw.length||arity>4)deny('E_NAMESPACE_ARITY','incompatible selected call');
+  const params=[],names=new Set();
+  for(const part of raw){
+    const p=/^int ([A-Za-z_][A-Za-z0-9_]{0,127})$/.exec(part);
+    if(!p||!rtlIdent(p[1])||['int','main','return','fnc','pub','namespace'].includes(p[1])||names.has(p[1]))
+      deny('E_NAMESPACE_PROFILE','exact integer parameters required');
+    names.add(p[1]);params.push({name:p[1],width:64});
+  }
+  if(m[4].length>1024)deny('E_NAMESPACE_PROFILE','expression budget');
+  const tokens=[];const re=/[ \t]+|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[()+*-]/gy;
+  for(let pos=0;pos<m[4].length;){
+    re.lastIndex=pos;const t=re.exec(m[4]);
+    if(!t)deny('E_NAMESPACE_PROFILE','closed integer expression required');
+    pos=re.lastIndex;if(!/^[ \t]+$/.test(t[0]))tokens.push(t[0]);
+    if(tokens.length>256)deny('E_NAMESPACE_PROFILE','expression token budget');
+  }
+  let at=0,nodes=0;
+  const node=x=>{if(++nodes>256)deny('E_NAMESPACE_PROFILE','expression node budget');return {...x,width:64};};
+  const constant=value=>node({kind:'constant',value});
+  const binary=(op,left,right)=>node({kind:'binary',op,left,right});
+  const integer=t=>{if(!/^(?:0|[1-9][0-9]{0,18})$/.test(t))deny('E_NAMESPACE_LITERAL','integer literal required');return BigInt(t);};
+  function primary(depth){
+    if(depth>32)deny('E_NAMESPACE_PROFILE','expression depth');
+    const t=tokens[at++];
+    if(t==='('){const e=additive(depth+1);if(tokens[at++]!==')')deny('E_NAMESPACE_PROFILE','unbalanced expression');return e;}
+    if(t==='-'){
+      if(tokens[at]==='9223372036854775808'){at++;return constant(SIGNED_MIN);}
+      return binary('-',constant(0n),primary(depth+1));
+    }
+    if(t!==undefined&&/^[0-9]+$/.test(t)){
+      const value=integer(t);if(value>SIGNED_MAX)deny('E_NAMESPACE_LITERAL','signed-int range exceeded');
+      return constant(value);
+    }
+    if(names.has(t))return node({kind:'input',name:t});
+    deny('E_NAMESPACE_PROFILE','unbound or effectful expression');
+  }
+  function multiplicative(depth){
+    let a=primary(depth);while(tokens[at]==='*'){at++;a=binary('*',a,primary(depth));}return a;
+  }
+  function additive(depth){
+    let a=multiplicative(depth);while(tokens[at]==='+'||tokens[at]==='-'){const op=tokens[at++];a=binary(op,a,multiplicative(depth));}return a;
+  }
+  const expression=additive(0);
+  if(at!==tokens.length)deny('E_NAMESPACE_PROFILE','trailing expression tokens');
+  enforceStructuralExpressionDepth(expression);
+  const program=admitProgram({name:modulePrefix+'_'+symbol,params,returnWidth:64,expression,checkedSigned:true});
+  return {program,systemVerilog:emitSystemVerilog(program)};
+}
+function emitCheckedSigned(p){
+  const ports=p.params.map(x=>'    input logic signed [63:0] in_'+x.name);
+  ports.push('    output logic signed [63:0] out_result','    output logic out_fault');
+  const lines=[];let seq=0;
+  const extended=v=>'$signed({{64{'+v+'[63]}},'+v+'})';
+  function lower(e){
+    const a=e.kind==='binary'?lower(e.left):null,b=e.kind==='binary'?lower(e.right):null;
+    const i=seq++,v='v_'+i,f='f_'+i;
+    if(e.kind==='constant'){
+      lines.push('    wire signed [63:0] '+v+' = 64\'sh'+BigInt.asUintN(64,e.value).toString(16).padStart(16,'0')+';');
+      lines.push('    wire '+f+' = 1\'b0;');
+    }else if(e.kind==='input'){
+      lines.push('    wire signed [63:0] '+v+' = in_'+e.name+';','    wire '+f+' = 1\'b0;');
+    }else{
+      const w='w_'+i;
+      lines.push('    wire signed [127:0] '+w+' = '+extended(a.v)+' '+e.op+' '+extended(b.v)+';');
+      lines.push('    wire signed [63:0] '+v+' = '+w+'[63:0];');
+      lines.push('    wire '+f+' = '+a.f+' | '+b.f+' | ('+w+' != '+extended(v)+');');
+    }
+    return {v,f};
+  }
+  const out=lower(p.expression);
+  return '// Restricted checked signed-i64 namespace RTL; fault port required\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n'+lines.join('\n')+'\n    assign out_fault = '+out.f+';\n    assign out_result = out_fault ? 64\'sd0 : '+out.v+';\nendmodule\n';
+}
 /** One exact source, immutable admitted AST, process-local only. Errors
  * preserve the preceding successful snapshot. */
 export class IncrementalSession {
@@ -517,6 +604,24 @@ export function evaluateReference(program,inputs){
         Object.hasOwn(descriptors[p.name],'value')))
     throw new TypeError('missing input or accessor-backed input');
   const values=Object.fromEntries(program.params.map(p=>[p.name,descriptors[p.name].value]));
+  if(program.checkedSigned===true){
+    // Validate every declared input, including unused parameters, before
+    // evaluating the admitted expression. No caller object coercion.
+    for(const p of program.params){
+      const value=values[p.name];
+      if(typeof value!=='bigint')throw new TypeError('non-BigInt input '+p.name);
+      if(value<SIGNED_MIN||value>SIGNED_MAX)throw new RangeError('out of range input '+p.name);
+    }
+    function checked(e){
+      let v;
+      if(e.kind==='constant')v=e.value;
+      else if(e.kind==='input')v=values[e.name];
+      else {const a=checked(e.left),b=checked(e.right);v=e.op==='+'?a+b:e.op==='-'?a-b:a*b;}
+      if(typeof v!=='bigint'||v<SIGNED_MIN||v>SIGNED_MAX)throw new RangeError('checked signed i64 fault');
+      return v;
+    }
+    return checked(program.expression);
+  }
   function go(e){
     const mask=(1n<<BigInt(e.width))-1n;
     if(e.kind==='constant')return BigInt(e.decimal);
