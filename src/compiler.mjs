@@ -381,6 +381,19 @@ export function emitSystemVerilog(p){
   return '// Generated from EXPERIMENTAL Oreslang hardware subset\n// Unsigned arithmetic wraps at output width\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n    assign out_result = '+renderExpr(p.expression)+';\nendmodule\n';
 }
 export function compileSource(source){const program=parseHardwareSource(source);return {program,systemVerilog:emitSystemVerilog(program)};}
+/** One exact source, immutable admitted AST, process-local only. No generic
+ * compiler/actor or cross-package reuse. Errors preserve previous state. */
+export class IncrementalSession {
+  #entry;
+  build(source,{cold=false}={}){
+    if(!cold&&this.#entry&&source===this.#entry.source){
+      return {...this.#entry.result,reused:true};
+    }
+    const result=compileSource(source);
+    this.#entry={source,result};
+    return {...result,reused:false};
+  }
+}
 export function evaluateReference(program,inputs){
   requireAdmittedProgram(program);
   // Treat caller values as data only: getters and Proxy traps may otherwise
