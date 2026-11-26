@@ -7,14 +7,19 @@ import {createHash} from 'node:crypto';
 import {emitCountedSingle} from '../src/counted-static-single.mjs';
 const corpus=process.argv[2];if(!corpus)throw Error('exact corpus required');
 const dir=mkdtempSync(join(tmpdir(),'atto-counted-single-'));
-const target="sv",positives=new Set(["counted-three","counted-one","counted-zero","counted-alias"]);
+const target=process.argv[3]??"sv";
+if(!["sv","c"].includes(target)){rmSync(dir,{recursive:true,force:true});throw Error("expected sv or c");}
+const positives=new Set(["counted-three","counted-one","counted-zero","counted-alias"]);
 function run(cmd,args){const r=spawnSync(cmd,args,{encoding:'utf8',timeout:60000});assert.equal(r.status,0,r.stderr+' '+r.stdout);return r.stdout.trim();}
 function execute(source,value,status){
  const artifact=emitCountedSingle(source,target);
  if(target==='c'){
-  writeFileSync(join(dir,'guest.c'),artifact+'\n#include <stdio.h>\nint main(void){int64_t value=0;int status=atto_counted_entry(&value);printf("%d %lld\\n",status,(long long)value);return 0;}');
-  run('cc',['-std=c11','-O1','-fsanitize=undefined','-fno-sanitize-recover=all',join(dir,'guest.c'),'-o',join(dir,'guest')]);
-  assert.equal(run(join(dir,'guest'),[]),status+' '+value);
+  const expected=status===0?value:1234567;
+  writeFileSync(join(dir,'guest.c'),artifact+'\n#include <assert.h>\n#include <stddef.h>\nint main(void){assert(atto_counted_entry(NULL)==2);for(int i=0;i<100;i++){int64_t value=1234567;int status=atto_counted_entry(&value);assert(status=='+status+' && value=='+expected+');}return 0;}\n');
+  for(const cc of ['gcc','clang'])for(const opt of ['-O0','-O2']){
+    run(cc,['-std=c11','-Wall','-Wextra','-Werror',opt,'-fsanitize=undefined','-fno-sanitize-recover=all',join(dir,'guest.c'),'-o',join(dir,'guest')]);
+    assert.equal(run(join(dir,'guest'),[]),'');
+  }
  }else{
   writeFileSync(join(dir,'guest.sv'),artifact);
   writeFileSync(join(dir,'tb.sv'),'module tb; reg enable=0; wire signed [63:0] result; wire [1:0] status; atto_counted dut(enable,result,status); initial begin #1; enable=1; #1; if(status!==2\'d'+status+' || result!==64\'sd'+value+') $fatal(1,"bad result"); enable=0; #1; if(result!==0 || status!==0) $fatal(1,"disabled"); enable=1; #1; if(status!==2\'d'+status+' || result!==64\'sd'+value+') $fatal(1,"repeat"); $display("PASS"); $finish; end endmodule');
