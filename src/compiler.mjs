@@ -1,4 +1,5 @@
 import {isProxy} from 'node:util/types';
+import {isClosedQuantityProfile,foldClosedQuantity} from './closed_quantity.mjs';
 /** Experimental standalone Oreslang fixed-width source -> combinational SystemVerilog.
  * Not integrated with full Oreslang frontends or shared HIR/MIR. Unsupported syntax fails closed.
  */
@@ -58,6 +59,7 @@ function prepareHardwareSource(source) {
   const masked=source.split('');
   const blank=(start,end)=>masked.fill(' ',start,end);
   let previous='';
+  let syncOffset=-1;
   const isStart=c=>c!==undefined&&/[A-Za-z_]/.test(c);
   const isPart=c=>c!==undefined&&/[A-Za-z0-9_]/.test(c);
   const lineEnd=c=>c===undefined||c==='\n'||c==='\r'||c==='\u0085'||c==='\u2028'||c==='\u2029';
@@ -91,22 +93,31 @@ function prepareHardwareSource(source) {
         if(next===quote){closed=true;break;}
       }
       if(!closed)fail('HDL_TOKEN',{offset:start},'unterminated source literal');
-      previous='literal';continue;
+      previous='literal';syncOffset=-1;continue;
     }
     if(isStart(c)){
       const start=i++;
       while(i<source.length&&isPart(source[i]))i++;
-      if(previous==='.'&&source.slice(start,i)==='try_publish')
+      const word=source.slice(start,i);
+      // Detect an active sync-task header even when an earlier scalar-only
+      // token (for example a mutable initializer '=') would stop lexing.
+      // Only adjacent identifiers separated by trivia count, not literals,
+      // comments, longer names or punctuation.
+      if(word==='task'&&syncOffset>=0)
+        fail('HDL_TASK_UNSUPPORTED',{offset:syncOffset},
+          'sync task requires caller identity and TaskScope; no RTL lowering');
+      syncOffset=word==='sync'?start:-1;
+      if(previous==='.'&&word==='try_publish')
         fail('HDL_ACTOR_PUBSUB_UNSUPPORTED',{offset:start},
           'Topic.try_publish needs checked actor authority, share! and typed Result receipt lowering; not supported by RTL');
       previous='id';continue;
     }
-    previous=c==='.'?'.':'other';i++;
+    previous=c==='.'?'.':'other';syncOffset=-1;i++;
   }
   return masked.join('');
 }
 
-export function lex(source) {
+function validatedHardwareSource(source) {
   if(typeof source!=='string'||Buffer.byteLength(source,'utf8')>MAX_SOURCE||source.includes('\0')||/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(source)) fail('HDL_SOURCE_LIMIT',{offset:0},'source must be UTF-8 text at most 128 KiB');
   // Reject Trojan Source reordering controls even in comments/ignored text.
   // U+200E/200F and U+061C are directional marks; U+202A..202E and
@@ -124,13 +135,26 @@ export function lex(source) {
   const controlOffset = source.search(/[\x1b\x7f]/);
   if(controlOffset>=0)
     fail('HDL_SOURCE_CONTROL',{offset:controlOffset},'terminal control in source');
-  const masked=prepareHardwareSource(source);
+  return prepareHardwareSource(source);
+}
+export function lex(source){return lexMasked(source,validatedHardwareSource(source));}
+function lexMasked(source,masked){
   const tokens=[];
-  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?]|./gy;
+  const re=/\s+|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?]|./gy;
   for(const m of masked.matchAll(re)) {
     const value=m[0];
     if(/^\s+$/.test(value)) continue;
-    if(['copy','take','borrow','share'].includes(value) &&
+    // Keyword bangs need ASCII whitespace after the complete suffix.
+    const at=m.index+value.length;
+    if(['trap','throw','raise','panic','copy','take','move','borrow','share','pin','drop','pipe','rpipe','stop','expand'].includes(value) &&
+       source[at]==='!' && source[at+1]!=='=' &&
+       !/^!eq(?![A-Za-z0-9_])/.test(source.slice(at))) {
+      const after=at+(value==='copy' && source[at+1]==='!' ? 2 : 1);
+      if(!/[ \t\r\n\v\f]/.test(source[after]??''))
+        fail('E_BANG_KEYWORD_WHITESPACE',{offset:m.index},'whitespace required after bang keyword');
+    }
+
+    if(['copy','take','move','borrow','share'].includes(value) &&
        source[m.index+value.length]==='!' &&
        source[m.index+value.length+1]!=='=' &&
        !/^!eq(?![A-Za-z0-9_])/.test(source.slice(m.index+value.length)))
@@ -145,11 +169,39 @@ export function lex(source) {
     // Refuse unsupported task and actor forms before typed generic punctuation
     // can obscure the diagnostic. Keep the existing actor-memory and pubsub
     // categories, and do not reserve longer names or comment text.
+    // Counted/typed selection is a scheduler operation, not a hardware
+    // combinational mux. The comment-masked lexical suffix preserves trivia.
+    if(value==='select'||value==='await') {
+      const declarationName=['fnc','routine','<-','•'].includes(tokens.at(-1)?.value);
+      const selectionHeader=/\s*(?:[({<]|(?:over|first|fair|random)(?![A-Za-z0-9_]))/y;
+      const awaitedSelection=/\s*(?:nb\s+)?select(?![A-Za-z0-9_])\s*(?:[({<]|(?:over|first|fair|random)(?![A-Za-z0-9_]))/y;
+      selectionHeader.lastIndex=m.index+value.length;
+      awaitedSelection.lastIndex=m.index+value.length;
+      if((value==='select' && !declarationName && selectionHeader.test(masked)) ||
+         (value==='await' && awaitedSelection.test(masked)))
+        fail('HDL_SELECT_UNSUPPORTED',{offset:m.index},
+          'typed/channel/Future select requires bounded scheduling and ownership; no combinational RTL lowering');
+    }
     if(value==='sync'||value==='await')
       fail('HDL_TASK_UNSUPPORTED',{offset:m.index},
         'sync/await task requires caller identity and TaskScope; no RTL lowering');
     const declaration=tokens.at(-1)?.value==='define' ||
       (tokens.at(-1)?.value==='pub' && tokens.at(-2)?.value==='define');
+    if(value==='container' && tokens.at(-1)?.value==='state' &&
+       (tokens.at(-2)?.value==='define' ||
+        (tokens.at(-2)?.value==='pub' && tokens.at(-3)?.value==='define')))
+      fail('HDL_STATE_CONTAINER_UNSUPPORTED',{offset:m.index},
+        'protected state containers require checked sequential storage, lease authority and lifecycle lowering; no RTL fallback');
+    // Persistent state requires a trusted durable broker; never lower a
+    // durable declaration as ordinary combinational state. Contextual words
+    // remain available as scalar identifiers outside the declaration prefix.
+    if(declaration && (value==='durable'||value==='persistent')) {
+      const actorHeader=/\s+actor(?![A-Za-z0-9_])/y;
+      actorHeader.lastIndex=m.index+value.length;
+      if(actorHeader.test(masked))
+        fail('HDL_DURABLE_ACTOR_UNSUPPORTED',{offset:m.index},
+          'durable actors require transactional storage and incarnation-fenced publication; no RTL fallback');
+    }
     if(declaration && value==='actor')
       fail('HDL_ACTOR_MEMORY_UNSUPPORTED',{offset:m.index},
         'nominal actor declarations require Ref32 and lifecycle lowering; no RTL fallback');
@@ -162,7 +214,7 @@ export function lex(source) {
       fail('HDL_ACTOR_UNSUPPORTED',{offset:m.index},
         'actor, supervisor and typed group/topic lifecycle require a target runtime; no RTL lowering');
     if(value==='%') fail('HDL_REMOVED_OPERATOR',{offset:m.index},'use an explicit typed remainder/modulus operation; no RTL lowering');
-    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
+    if(!/^(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|<-|->|•|\^\^|[()+\-,;.:{}\[\]~&|^?])$/.test(value)) fail('HDL_TOKEN',{offset:m.index},'unsupported token '+JSON.stringify(value));
     // Canonical exceptional control has no synthesizable typed effect path.
     if(['trap','throw','raise','panic'].includes(value) &&
        source[m.index+value.length]==='!' &&
@@ -235,7 +287,12 @@ function rejectHybridActorMemory(ts) {
 }
 
 export function parseHardwareSource(source) {
-  const ts=lex(source); let i=0;
+  const masked=validatedHardwareSource(source);
+  if(isClosedQuantityProfile(masked)){
+    const value=foldClosedQuantity(masked,fail,source);
+    return admitProgram({name:'main',params:[],returnWidth:64,signed:true,expression:{kind:'constant',width:64,decimal:value.toString()}});
+  }
+  const ts=lexMasked(source,masked); let i=0;
   rejectSingletonDeclarations(ts);
   rejectExecutionDomains(ts);
   rejectHybridActorMemory(ts);
@@ -331,7 +388,19 @@ export function parseHardwareSource(source) {
       if(++expressionNodes>MAX_EXPR_NODES)fail('HDL_EXPR_LIMIT',member,'expression too complex');
       return {kind:'binary',op:'^',left:a,right:b,width:a.width};
     }
-    const t=take(),bits=symbols.get(t.value);
+    const t=take();
+    // Explicitly sized unsigned literals; never infer width or truncate.
+    if(/^[0-9]+$/.test(t.value)){
+      if(returnWidth===null||inferredReturn)
+        fail('HDL_LITERAL_WIDTH',t,'decimal literal requires explicit unsigned return width');
+      if(t.value.length>20||!/^(0|[1-9][0-9]*)$/.test(t.value))
+        fail('HDL_LITERAL_RANGE',t,'noncanonical or oversized decimal literal');
+      const value=BigInt(t.value);
+      if(value>=(1n<<BigInt(returnWidth)))
+        fail('HDL_LITERAL_RANGE',t,'decimal literal exceeds unsigned return width');
+      return {kind:'literal',value:t.value,width:returnWidth};
+    }
+    const bits=symbols.get(t.value);
     if(bits===undefined)fail('HDL_UNBOUND',t,'undeclared or unsupported expression '+t.value);
     return {kind:'input',name:t.value,width:bits};
   }
@@ -365,22 +434,35 @@ export function parseHardwareSource(source) {
   if([...fileExports].some(exported=>exported!==name))
     fail('HDL_EXPORT_UNBOUND',{offset:0},'export target must be the compiled fnc');
   if(inferredReturn) returnWidth=expr.width;
-  if(!params.length)fail('HDL_PARAMS',{offset:0},'at least one input required');
+  if(!params.length&&expr.kind!=='literal')fail('HDL_PARAMS',{offset:0},'zero-input profile requires a single decimal literal');
   if(expr.width!==returnWidth)fail('HDL_RETURN_WIDTH',{offset:0},'return width does not equal expression width');
   enforceStructuralExpressionDepth(expr);
   return admitProgram({name,params,returnWidth,expression:expr});
 }
 function renderExpr(e){
-  if(e.kind==='constant')return e.width+"'d"+e.value.toString();
   if(e.kind==='input')return 'in_'+e.name;
+  if(e.kind==='literal')return e.width+"'d"+e.value;
+  if(e.kind==='constant')return "64'sh"+BigInt.asUintN(64,BigInt(e.decimal)).toString(16).padStart(16,'0');
   return '('+renderExpr(e.left)+' '+e.op+' '+renderExpr(e.right)+')';
 }
 export function emitSystemVerilog(p){
   requireAdmittedProgram(p);
   if(p.checkedSigned===true)return emitCheckedSigned(p);
   const ports=p.params.map(x=>'    input logic ['+(x.width-1)+':0] in_'+x.name);
-  ports.push('    output logic ['+(p.returnWidth-1)+':0] out_result');
-  return '// Generated from EXPERIMENTAL Oreslang hardware subset\n// Unsigned arithmetic wraps at output width\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n    assign out_result = '+renderExpr(p.expression)+';\nendmodule\n';
+  ports.push('    output logic '+(p.signed?'signed ':'')+'['+(p.returnWidth-1)+':0] out_result');
+  return '// Generated from EXPERIMENTAL Oreslang hardware subset\n// '+(p.signed?'Closed checked quantity constant; no runtime traps':'Unsigned arithmetic wraps at output width')+'\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n    assign out_result = '+renderExpr(p.expression)+';\nendmodule\n';
+}
+export function compileStrictSource(source){
+  const masked=validatedHardwareSource(source);
+  let value;
+  try{value=foldClosedQuantity(masked,fail,source,{strict:true});}
+  catch(e){
+    if(e?.code==='HDL_QUANTITY_SYNTAX'||e?.code==='HDL_QUANTITY_PROFILE')
+      fail('E_VERIFY_UNSUPPORTED',{offset:0},'unsupported strict HDL closed proof source');
+    throw e;
+  }
+  const program=admitProgram({name:'main',params:[],returnWidth:64,signed:true,expression:{kind:'constant',width:64,decimal:value.toString()}});
+  return {program,systemVerilog:emitSystemVerilog(program)};
 }
 export function compileSource(source){const program=parseHardwareSource(source);return {program,systemVerilog:emitSystemVerilog(program)};}
 // Opt-in closed public provider profile. The host must authenticate manifest
@@ -404,7 +486,7 @@ export function compileNamespaceProvider(source,namespace,symbol){
   if(value>9223372036854775807n)deny('E_NAMESPACE_LITERAL','signed-int range exceeded');
   // Use the same parser-owned immutable AST and actual SystemVerilog emitter.
   // No new public AST construction or arbitrary RTL injection path.
-  const program=admitProgram({name:symbol,params:[],returnWidth:64,expression:{kind:'constant',width:64,value}});
+  const program=admitProgram({name:symbol,params:[],returnWidth:64,expression:{kind:'literal',width:64,value:value.toString()}});
   return {program,systemVerilog:emitSystemVerilog(program)};
 }
 
@@ -494,8 +576,8 @@ function emitCheckedSigned(p){
   const out=lower(p.expression);
   return '// Restricted checked signed-i64 namespace RTL; fault port required\nmodule ores_'+p.name+'(\n'+ports.join(',\n')+'\n);\n'+lines.join('\n')+'\n    assign out_fault = '+out.f+';\n    assign out_result = out_fault ? 64\'sd0 : '+out.v+';\nendmodule\n';
 }
-/** One exact source, immutable admitted AST, process-local only. No generic
- * compiler/actor or cross-package reuse. Errors preserve previous state. */
+/** One exact source, immutable admitted AST, process-local only. Errors
+ * preserve the preceding successful snapshot. */
 export class IncrementalSession {
   #entry;
   build(source,{cold=false}={}){
@@ -542,7 +624,8 @@ export function evaluateReference(program,inputs){
   }
   function go(e){
     const mask=(1n<<BigInt(e.width))-1n;
-    if(e.kind==='constant')return e.value;
+    if(e.kind==='constant')return BigInt(e.decimal);
+    if(e.kind==='literal')return BigInt(e.value);
     if(e.kind==='input'){
       const n=values[e.name];
       if(typeof n!=='bigint')throw new TypeError('non-BigInt input '+e.name);

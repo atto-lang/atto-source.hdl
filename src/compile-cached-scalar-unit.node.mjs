@@ -7,7 +7,7 @@ import {compileSource} from './compiler.mjs';
 import {encodeCacheKey,admitLedgerRecord} from './compiler-cache-envelope.node.mjs';
 import {TrustedArtifactStore} from './compiler-artifact-store.node.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
-const files=Object.freeze(['compiler.mjs','compiler-cache-envelope.node.mjs','compiler-artifact-store.node.mjs','compile-cached-scalar-unit.node.mjs'].sort());
+const files=Object.freeze(['compiler.mjs','closed_quantity.mjs','compiler-cache-envelope.node.mjs','compiler-artifact-store.node.mjs','compile-cached-scalar-unit.node.mjs'].sort());
 // The list is deliberately explicit; CI must audit new compiler imports.
 // A mutable installation is outside this API's trust model.
 export function scalarCompilerClosureSha256(){

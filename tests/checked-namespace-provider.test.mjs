@@ -30,3 +30,21 @@ test('RTL checked output uses widened intermediate and fault suppression',()=>{
  assert.match(systemVerilog,/assign out_fault = f_\d+;/);
  assert.match(systemVerilog,/assign out_result = out_fault \? 64'sd0 : v_\d+;/);
 });
+
+import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+test('actual checked RTL reports fault and suppresses value on overflow',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'atto-checked-provider-'));
+ try{
+  const rtl=join(dir,'guest.sv'),tb=join(dir,'tb.sv'),sim=join(dir,'sim');
+  const hex=v=>BigInt.asUintN(64,v).toString(16).padStart(16,'0');
+  const max=(1n<<63n)-1n,min=-(1n<<63n);
+  for(const [expr,x,y,want,fault] of [['x * y + 2',-10n,4n,-38n,0],['(x + 1) - 1',max,0n,0n,1],['x * y',min,-1n,0n,1],['-x',min,0n,0n,1],['x - y',min,0n,min,0]]){
+   writeFileSync(rtl,compile(expr).systemVerilog);
+   writeFileSync(tb,"module tb; logic signed [63:0] x=64'sh"+hex(x)+",y=64'sh"+hex(y)+"; wire signed [63:0] result; wire fault; ores_provider_function0 dut(.in_x(x),.in_y(y),.out_result(result),.out_fault(fault)); initial begin #1; if(result !== 64'sh"+hex(want)+" || fault !== 1'b"+fault+") $fatal(1); $finish; end endmodule");
+   execFileSync('iverilog',['-g2012','-s','tb','-o',sim,rtl,tb]);execFileSync('vvp',[sim]);
+  }
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});

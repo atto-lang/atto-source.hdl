@@ -63,3 +63,15 @@ test('persistent compiler output executes across process restart',async()=>{
  console.log('PERSISTENT_HDL|cold=42|warm-child=42|edit=40|rollback|corruption-and-links-denied');
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+ test('explicit unsigned literal range and zero-input RTL simulation',()=>{
+ const s=new IncrementalSession();
+ for(const [width,value] of [[1,'0'],[1,'1'],[8,'42'],[64,'18446744073709551615']]){
+  const source='pub fnc calc(): u'+width+' { return '+value+'; }';const a=s.build(source,{cold:true});
+  assert.equal(evaluateReference(a.program,{}),BigInt(value));assert.equal(a.systemVerilog,compileSource(source).systemVerilog);assert.equal(s.build(source).reused,true);
+  const dir=mkdtempSync(join(tmpdir(),'atto-hdl-literal-'));try{const rtl=join(dir,'calc.sv'),tb=join(dir,'tb.sv'),out=join(dir,'sim');writeFileSync(rtl,a.systemVerilog);writeFileSync(tb,"module tb; wire ["+(width-1)+":0] result; ores_calc dut(.out_result(result)); initial begin #1; if(result !== "+width+"'d"+value+") $fatal(1); $finish; end endmodule");execFileSync('iverilog',['-g2012','-s','tb','-o',out,rtl,tb]);execFileSync('vvp',[out]);}finally{rmSync(dir,{recursive:true,force:true});}
+ }
+ for(const [source,code] of [['fnc f():u8{return 256;}','HDL_LITERAL_RANGE'],['fnc f():u64{return 18446744073709551616;}','HDL_LITERAL_RANGE'],['fnc f():u8{return 00;}','HDL_LITERAL_RANGE'],['fnc f():infer{return 1;}','HDL_LITERAL_WIDTH'],['fnc f():u8{return 1+2;}','HDL_PARAMS']])assert.throws(()=>s.build(source),e=>e.code===code);
+ assert.equal(s.build('pub fnc calc(): u64 { return 18446744073709551615; }').reused,true);
+ console.log('HDL_LITERAL|4-rtl-boundaries|5-negative|rollback');
+ });
