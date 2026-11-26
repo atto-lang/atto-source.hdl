@@ -160,6 +160,11 @@ export function lex(source) {
         'sync/await task requires caller identity and TaskScope; no RTL lowering');
     const declaration=tokens.at(-1)?.value==='define' ||
       (tokens.at(-1)?.value==='pub' && tokens.at(-2)?.value==='define');
+    if(value==='container' && tokens.at(-1)?.value==='state' &&
+       (tokens.at(-2)?.value==='define' ||
+        (tokens.at(-2)?.value==='pub' && tokens.at(-3)?.value==='define')))
+      fail('HDL_STATE_CONTAINER_UNSUPPORTED',{offset:m.index},
+        'protected state containers require checked sequential storage, lease authority and lifecycle lowering; no RTL fallback');
     if(declaration && value==='actor')
       fail('HDL_ACTOR_MEMORY_UNSUPPORTED',{offset:m.index},
         'nominal actor declarations require Ref32 and lifecycle lowering; no RTL fallback');
