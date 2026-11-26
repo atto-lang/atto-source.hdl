@@ -52,7 +52,16 @@ export function foldClosedQuantity(masked,fail){
   }
   expect(';');
  }
- eat('pub');expect('fnc');expect('main');expect('(');expect(')');if(!eat('->'))expect(':');expect('int');expect('{');expect('return');
+ eat('pub');expect('fnc');
+ if(peek().value!=='main')err('HDL_QUANTITY_PROFILE','private helper and contract lowering is not implemented');
+ expect('main');expect('(');expect(')');if(!eat('->'))expect(':');expect('int');
+ if(peek().value==='requires'||peek().value==='ensures')err('HDL_QUANTITY_PROFILE','callable contracts require verified helper lowering');
+ let closer='}';
+ if(!eat('{')){
+  if(eat('::')||eat('begin'))closer='end';
+  else err('HDL_QUANTITY_SYNTAX','expected callable body opener');
+ }
+ expect('return');
  function node(op,args,dim=scalar(),scale=ONE){
   if(nodes.length>=1024)err('HDL_EXPR_LIMIT','quantity nodes');
   const depth=1+Math.max(0,...args.filter(x=>typeof x==='object').map(x=>x.depth));
@@ -116,7 +125,7 @@ export function foldClosedQuantity(masked,fail){
   return a;
  }
  const result=expr(0,0);if(!plain(result))err('E_UNIT_ERASURE','scalar return erases quantity');
- expect(';');expect('}');expect('<eof>');
+ expect(';');expect(closer);expect('<eof>');
  // Only after static admission, evaluate checked closed arithmetic in
  // source order. No artifact may be emitted for a statically known trap.
  const values=[];
