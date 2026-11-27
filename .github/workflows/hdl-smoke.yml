@@ -2,6 +2,8 @@ name: Experimental HDL Compiler RTL Verification
 on:
   push:
     branches: [main, 'feat/**']
+  merge_group:
+    types: [checks_requested]
   pull_request:
 permissions:
   contents: read
