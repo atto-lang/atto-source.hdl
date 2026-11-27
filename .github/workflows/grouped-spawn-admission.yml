@@ -1,0 +1,27 @@
+name: HDL grouped spawn unsupported profile
+on:
+  pull_request:
+    paths:
+      - 'src/compiler.mjs'
+      - 'src/closed_quantity.mjs'
+      - 'tests/grouped-spawn-admission.test.mjs'
+      - '.github/workflows/grouped-spawn-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Exact-head hardware admission regression
+        env:
+          EXPECTED: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          node --test tests/grouped-spawn-admission.test.mjs
