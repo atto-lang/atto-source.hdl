@@ -2,6 +2,8 @@ name: Hardware width proof self-tests (not RTL synthesis)
 on:
   push:
   pull_request:
+  merge_group:
+    types: [checks_requested]
 permissions:
   contents: read
 jobs:
@@ -26,4 +28,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+      - name: Install required RTL simulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+          command -v iverilog
+          command -v vvp
       - run: npm test
